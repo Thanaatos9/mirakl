@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles   # 👈 AJOUT
-from routers import tickets, validations, stream, demo
+from routers import tickets, validations, stream, demo, marketplace
 
 app = FastAPI(title="Eugenia SAV API", version="0.1.0")
 
@@ -17,6 +17,7 @@ app.include_router(tickets.router)
 app.include_router(validations.router)
 app.include_router(stream.router)
 app.include_router(demo.router)
+app.include_router(marketplace.router)
 
 @app.get("/health")
 async def health():

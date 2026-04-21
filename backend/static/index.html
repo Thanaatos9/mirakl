@@ -158,6 +158,8 @@ const Sidebar = ({page, setPage, tweaks}) => {
     {id:'flux',label:'Flux Live',icon:'zap'},
     {id:'validations',label:'Validations',icon:'check', badge:4},
     {id:'agent',label:'Agent IA',icon:'brain'},
+    {id:'__sep__',label:'',icon:''},
+    {id:'marketplace',label:'🏪 Marketplace',icon:'eye', marketplace:true},
   ];
   return (
     <div style={{width:220,flexShrink:0,background:'#0f1629',display:'flex',flexDirection:'column',height:'100vh',position:'sticky',top:0,overflowY:'auto'}}>
@@ -186,17 +188,20 @@ const Sidebar = ({page, setPage, tweaks}) => {
       {/* Nav */}
       <nav style={{padding:'10px 10px',flex:1}}>
         {nav.map(n => {
+          if(n.id==='__sep__') return <div key="sep" style={{height:1,background:'rgba(255,255,255,.08)',margin:'8px 4px'}}/>;
           const active = page===n.id;
+          const isMp = n.marketplace;
           return (
             <button key={n.id} onClick={()=>setPage(n.id)} style={{
-              width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:'none',cursor:'pointer',
-              background:active?'rgba(59,130,246,.15)':'transparent',
-              color:active?tweaks.accentColor:'#94a3b8',fontWeight:active?600:400,fontSize:13,
+              width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:isMp?'1px solid rgba(167,139,250,.25)':'none',cursor:'pointer',
+              background:active?(isMp?'rgba(139,92,246,.25)':'rgba(59,130,246,.15)'):'transparent',
+              color:active?(isMp?'#c4b5fd':tweaks.accentColor):(isMp?'#a78bfa':'#94a3b8'),fontWeight:active?600:400,fontSize:13,
               marginBottom:2,transition:'all .15s ease',fontFamily:'DM Sans',
             }}>
-              <Icon name={n.icon} size={15} color={active?tweaks.accentColor:'#94a3b8'}/>
+              <Icon name={n.icon} size={15} color={active?(isMp?'#c4b5fd':tweaks.accentColor):(isMp?'#a78bfa':'#94a3b8')}/>
               <span style={{flex:1,textAlign:'left'}}>{n.label}</span>
               {n.badge && <span style={{background:'#ef4444',color:'#fff',borderRadius:99,fontSize:10,fontWeight:700,padding:'1px 6px'}}>{n.badge}</span>}
+              {isMp && !active && <span style={{fontSize:9,padding:'1px 5px',borderRadius:4,background:'rgba(139,92,246,.2)',color:'#a78bfa',fontWeight:600}}>RO</span>}
             </button>
           );
         })}
@@ -1097,6 +1102,132 @@ const TweaksPanel = ({tweaks, setTweaks, visible}) => {
   );
 };
 
+// ── MARKETPLACE PAGE (lecture seule) ─────────────────────────────────────────
+const MP_STATS = {
+  totalTickets: 32,
+  resolved: 27,
+  escalated: 3,
+  slaBreaches: 4,
+  totalAmount: 12840.50,
+  aiRate: 84.4,
+  byType: [{l:'Livraison',v:12,c:'#f59e0b'},{l:'Produit',v:8,c:'#ef4444'},{l:'Remboursement',v:6,c:'#8b5cf6'},{l:'Échange',v:4,c:'#10b981'},{l:'Annulation',v:2,c:'#3b82f6'}],
+};
+const MP_MERCHANTS = [
+  {name:'Amazon',total:18,resolved:16,escalated:1,slaBreaches:1,amount:5640,rate:88.9},
+  {name:'Fnac',total:9,resolved:7,escalated:2,slaBreaches:2,amount:4120,rate:77.8},
+  {name:'Cdiscount',total:5,resolved:4,escalated:0,slaBreaches:1,amount:3080,rate:80.0},
+];
+const MP_CRITICAL = TICKETS.filter(t=>t.status==='escalated');
+
+const MarketplacePage = ({tweaks}) => {
+  const violet = '#8b5cf6';
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title="Vue Marketplace" subtitle="Agrégé tous marchands — Lecture seule" tweaks={tweaks}>
+        <span style={{fontSize:11,padding:'4px 10px',borderRadius:6,background:'rgba(139,92,246,.12)',color:violet,fontWeight:600,border:'1px solid rgba(139,92,246,.25)'}}>🏪 Opérateur Marketplace</span>
+      </TopBar>
+      <div style={{padding:28}}>
+
+        {/* Bannière read-only */}
+        <div style={{background:'linear-gradient(135deg,#2e1065,#4c1d95)',borderRadius:12,padding:'14px 20px',marginBottom:24,display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:22}}>🏪</span>
+          <div style={{flex:1}}>
+            <div style={{color:'#e0d9ff',fontWeight:700,fontSize:14}}>Vue Marketplace — Données agrégées de tous les marchands</div>
+            <div style={{color:'#a78bfa',fontSize:12,marginTop:2}}>Accès lecture seule · Aucune action disponible · Données anonymisées</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#a78bfa'}}>
+            <span style={{width:7,height:7,borderRadius:'50%',background:'#10b981',display:'inline-block',animation:'pulse-dot 2s ease infinite'}}/>
+            Live
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div style={{display:'flex',gap:14,marginBottom:24,flexWrap:'wrap'}}>
+          <KpiCard label="Total tickets" value={String(MP_STATS.totalTickets)} sub={`${MP_STATS.escalated} escaladés`} color="#3b82f6" icon={<Icon name="inbox" size={18} color="#3b82f6"/>}/>
+          <KpiCard label="Résolution IA" value={`${MP_STATS.aiRate}%`} sub={`${MP_STATS.resolved} résolus auto`} color="#10b981" icon={<Icon name="brain" size={18} color="#10b981"/>} trend={5}/>
+          <KpiCard label="SLA dépassés" value={String(MP_STATS.slaBreaches)} sub="Tous marchands" color="#ef4444" icon={<Icon name="zap" size={18} color="#ef4444"/>}/>
+          <KpiCard label="Montant traité" value={`${MP_STATS.totalAmount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'})}`} sub="Volume total" color="#8b5cf6" icon={<Icon name="trend" size={18} color="#8b5cf6"/>}/>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:24}}>
+          {/* Distribution par type */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px'}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#0f172a',marginBottom:16,textTransform:'uppercase',letterSpacing:.5}}>Distribution par type</div>
+            {MP_STATS.byType.map(t=>(
+              <div key={t.l} style={{marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                  <span style={{fontSize:12,color:'#475569'}}>{t.l}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:'#0f172a'}}>{t.v} ({Math.round(t.v/MP_STATS.totalTickets*100)}%)</span>
+                </div>
+                <div style={{height:6,background:'#f1f5f9',borderRadius:99}}>
+                  <div style={{width:`${Math.round(t.v/MP_STATS.totalTickets*100)}%`,height:'100%',background:t.c,borderRadius:99,transition:'width .6s ease'}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Performance marchands */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px'}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#0f172a',marginBottom:16,textTransform:'uppercase',letterSpacing:.5}}>Performance par marchand</div>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{background:'#f8fafc'}}>
+                {['Marchand','Tickets','IA %','SLA ⚠️','Montant'].map(h=><th key={h} style={{padding:'8px 10px',textAlign:h==='Marchand'?'left':'right',fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:.5}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {MP_MERCHANTS.map(m=>(
+                  <tr key={m.name} style={{borderTop:'1px solid #f8fafc'}}>
+                    <td style={{padding:'10px',fontSize:13,fontWeight:600,color:'#0f172a'}}>{m.name}</td>
+                    <td style={{padding:'10px',fontSize:12,textAlign:'right',color:'#334155'}}>{m.total}</td>
+                    <td style={{padding:'10px',fontSize:12,fontWeight:700,textAlign:'right',color:m.rate>=85?'#10b981':m.rate>=70?'#f59e0b':'#ef4444'}}>{m.rate}%</td>
+                    <td style={{padding:'10px',fontSize:12,fontWeight:700,textAlign:'right',color:m.slaBreaches>0?'#ef4444':'#10b981'}}>{m.slaBreaches}</td>
+                    <td style={{padding:'10px',fontSize:11,textAlign:'right',color:'#64748b',fontFamily:'DM Mono'}}>{m.amount.toLocaleString('fr-FR')}€</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Tickets escaladés — lecture seule */}
+        <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden'}}>
+          <div style={{padding:'14px 20px',borderBottom:'1px solid #f8fafc',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontWeight:700,fontSize:14,color:'#0f172a'}}>Tickets nécessitant attention</span>
+              {MP_CRITICAL.length>0 && <span style={{background:'#fee2e2',color:'#991b1b',borderRadius:99,fontSize:10,fontWeight:700,padding:'2px 8px'}}>{MP_CRITICAL.length}</span>}
+            </div>
+            <span style={{fontSize:11,color:'#94a3b8',fontStyle:'italic'}}>Lecture seule — aucune action disponible</span>
+          </div>
+          {MP_CRITICAL.length===0 ? (
+            <div style={{padding:40,textAlign:'center',color:'#10b981',fontSize:13,fontWeight:600}}>✅ Aucun ticket escaladé pour le moment</div>
+          ) : (
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{background:'#f8fafc'}}>
+                {['Client (anonymisé)','Marketplace','Sujet','Statut','Priorité','SLA'].map(h=><th key={h} style={{padding:'10px 16px',textAlign:'left',fontSize:10,fontWeight:600,color:'#94a3b8',letterSpacing:.5,textTransform:'uppercase'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {MP_CRITICAL.map(t=>(
+                  <tr key={t.id} style={{borderTop:'1px solid #f8fafc'}}>
+                    <td style={{padding:'12px 16px'}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'#0f172a'}}>{t.client.split(' ')[0]} {t.client.split(' ').slice(-1)[0][0]}.</div>
+                      <div style={{fontSize:10,color:'#94a3b8',fontFamily:'DM Mono'}}>#{t.orderRef}</div>
+                    </td>
+                    <td style={{padding:'12px 16px',fontSize:12,color:'#64748b'}}>{t.marketplace}</td>
+                    <td style={{padding:'12px 16px',fontSize:12,color:'#334155',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.subject}</td>
+                    <td style={{padding:'12px 16px'}}><Badge type={t.status}/></td>
+                    <td style={{padding:'12px 16px'}}><Badge type={t.priority}/></td>
+                    <td style={{padding:'12px 16px',fontSize:11,color:t.sla==='Dépassé'?'#ef4444':'#f59e0b',fontWeight:600}}>{t.sla}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 const App = () => {
   const saved = (() => { try { return JSON.parse(localStorage.getItem('mirakl-sav-state')||'{}') } catch{return{}} })();
@@ -1127,6 +1258,7 @@ const App = () => {
         {page==='flux' && <FluxPage setPage={setPage} tweaks={tweaks}/>}
         {page==='validations' && <ValidationsPage tweaks={tweaks}/>}
         {page==='agent' && <AgentPage tweaks={tweaks}/>}
+        {page==='marketplace' && <MarketplacePage tweaks={tweaks}/>}
         {page==='settings' && <PlaceholderPage title="Paramètres" tweaks={tweaks}/>}
       </div>
       <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} visible={tweaksVisible}/>
