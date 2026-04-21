@@ -19,8 +19,13 @@ app.include_router(stream.router)
 app.include_router(demo.router)
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+async def health():
+    from services.db import list_tickets, list_validations
+    return {
+        "status": "ok",
+        "tickets": len(list_tickets()),
+        "validations": len(list_validations(status="pending")),
+    }
 
-# 👇 AJOUT : à mettre TOUT EN BAS du fichier, après toutes les routes
+# Static files (doit rester en bas, après toutes les routes API)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

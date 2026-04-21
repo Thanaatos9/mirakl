@@ -1,15 +1,13 @@
 import asyncio
 from typing import AsyncGenerator
 from models import AgentEvent
-import json
+from services import db
 
-# Global subscriber queues — one per connected SSE client
+# SSE subscribers — one queue per connected client (in-memory, not persisted)
 _subscribers: list[asyncio.Queue] = []
 
-# In-memory state
-tickets: dict = {}          # ticket_id → Ticket
-validations: dict = {}      # validation_id → HumanValidation
-paused_tickets: set = set() # ticket_ids paused by human override
+# Tickets paused by human override (in-memory is fine, resets on restart)
+paused_tickets: set = set()
 
 
 async def subscribe() -> AsyncGenerator[str, None]:
@@ -27,7 +25,5 @@ async def publish(event: AgentEvent) -> None:
     payload = f"data: {event.model_dump_json()}\n\n"
     for queue in _subscribers:
         await queue.put(payload)
-
-    # Persist event on the ticket
-    if event.ticket_id in tickets:
-        tickets[event.ticket_id]["agent_events"].append(event.model_dump())
+    # Persist event in Supabase
+    db.save_event(event.model_dump())

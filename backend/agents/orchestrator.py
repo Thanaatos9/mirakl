@@ -5,7 +5,7 @@ import json
 from openai import AsyncOpenAI
 from config import get_settings
 from agents import tools as t
-from services import event_bus
+from services import event_bus, db
 
 SYSTEM_PROMPT = """
 Tu es l'orchestrateur SAV d'Eugenia. Tu reçois des tickets clients et tu dois :
@@ -117,8 +117,7 @@ Politique marchande : retour sous {merchant.get('policy', {}).get('return_window
     reasoning = result["reasoning"]
     escalate = result["escalate"] or confidence < 70
 
-    event_bus.tickets[ticket_id]["type"] = ticket_type
-    event_bus.tickets[ticket_id]["confidence_score"] = confidence
+    db.update_ticket(ticket_id, {"type": ticket_type, "confidence_score": confidence})
 
     await t.emit_event(
         ticket_id=ticket_id,
@@ -130,7 +129,7 @@ Politique marchande : retour sous {merchant.get('policy', {}).get('return_window
     )
 
     if escalate:
-        event_bus.tickets[ticket_id]["status"] = "escalated"
+        db.update_ticket(ticket_id, {"status": "escalated"})
         await t.emit_event(
             ticket_id=ticket_id,
             agent="orchestrator",
@@ -141,7 +140,7 @@ Politique marchande : retour sous {merchant.get('policy', {}).get('return_window
         return ticket_type
 
     # Route vers l'agent spécialisé
-    event_bus.tickets[ticket_id]["status"] = "in_progress"
+    db.update_ticket(ticket_id, {"status": "in_progress"})
     await _route(ticket_id, ticket_type, order_id, customer_id)
     return ticket_type
 

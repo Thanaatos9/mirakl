@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from data.loader import get_scenarios, get_orders, get_customers
 from models import Ticket, Customer, Order, AgentEvent, HumanValidation
-from services import event_bus
+from services import db, event_bus
 
 router = APIRouter(prefix="/demo")
 
@@ -17,7 +17,7 @@ async def list_scenarios():
 async def load_scenario(scenario_id: str, background_tasks: BackgroundTasks):
     scenarios = get_scenarios()
     if scenario_id not in scenarios:
-        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found. Available: {list(scenarios.keys())}")
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
 
     scenario = scenarios[scenario_id]
     orders = get_orders()
@@ -39,7 +39,7 @@ async def load_scenario(scenario_id: str, background_tasks: BackgroundTasks):
             raw_message=ticket_def["message"],
             type=ticket_def.get("type", "unknown"),
         )
-        event_bus.tickets[ticket.id] = ticket.model_dump()
+        db.save_ticket(ticket.model_dump())
         created_tickets.append(ticket.id)
 
     return {"ok": True, "scenario": scenario_id, "tickets_created": created_tickets}
@@ -47,8 +47,9 @@ async def load_scenario(scenario_id: str, background_tasks: BackgroundTasks):
 
 @router.post("/reset")
 async def reset_demo():
-    event_bus.tickets.clear()
-    event_bus.validations.clear()
+    db.get_db().table("tickets").delete().neq("id", "").execute()
+    db.get_db().table("validations").delete().neq("id", "").execute()
+    db.get_db().table("agent_events").delete().neq("id", "").execute()
     event_bus.paused_tickets.clear()
     return {"ok": True, "message": "Demo state reset"}
 

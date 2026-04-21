@@ -3,7 +3,7 @@ CancellationAgent — gère les annulations après expédition.
 TODO P3 : enrichir avec request_carrier_intercept
 """
 from agents import tools as t
-from services import event_bus
+from services import event_bus, db
 
 
 async def run(ticket_id: str, order_id: str, customer_id: str):
@@ -42,7 +42,7 @@ async def run(ticket_id: str, order_id: str, customer_id: str):
             agent_reasoning=f"Interception demandée chez {carrier_status.get('carrier')}. Remboursement de {order.get('total_amount')}€ à valider dès confirmation retour colis."
         )
     else:
-        event_bus.tickets[ticket_id]["status"] = "awaiting_human"
+        db.update_ticket(ticket_id, {"status": "awaiting_human"})
         await t.emit_event(
             ticket_id=ticket_id,
             agent="cancellation",

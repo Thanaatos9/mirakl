@@ -5,7 +5,7 @@ import json
 from openai import AsyncOpenAI
 from config import get_settings
 from agents import tools as t
-from services import event_bus
+from services import event_bus, db
 from datetime import datetime
 
 SYSTEM_PROMPT = """
@@ -106,8 +106,7 @@ Le client n'a pas reçu de confirmation d'expédition. Analyse la situation et d
             reasoning=f"Email envoyé au client : {result['customer_message'][:100]}",
             data=email_result
         )
-        event_bus.tickets[ticket_id]["status"] = "resolved"
-        event_bus.tickets[ticket_id]["resolution"] = result["customer_message"]
+        db.update_ticket(ticket_id, {"status": "resolved", "resolution": result["customer_message"]})
 
     elif action == "escalate_carrier":
         await t.emit_event(
@@ -126,14 +125,13 @@ Le client n'a pas reçu de confirmation d'expédition. Analyse la situation et d
             ticket_id=ticket_id,
             agent="shipping",
             action="customer_notified",
-            reasoning=f"Client informé du retard et des actions en cours.",
+            reasoning="Client informé du retard et des actions en cours.",
             data=email_result
         )
-        event_bus.tickets[ticket_id]["status"] = "resolved"
-        event_bus.tickets[ticket_id]["resolution"] = result["customer_message"]
+        db.update_ticket(ticket_id, {"status": "resolved", "resolution": result["customer_message"]})
 
     elif action == "escalate_human":
-        event_bus.tickets[ticket_id]["status"] = "awaiting_human"
+        db.update_ticket(ticket_id, {"status": "awaiting_human"})
         await t.emit_event(
             ticket_id=ticket_id,
             agent="shipping",
