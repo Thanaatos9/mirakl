@@ -31,8 +31,7 @@ async def ingest_ticket(body: IngestRequest, background_tasks: BackgroundTasks):
 
     event_bus.tickets[ticket.id] = ticket.model_dump()
 
-    # Agents (P2/P3) will hook here — stub fires a welcome event for now
-    background_tasks.add_task(_stub_orchestrator, ticket.id, body.customer_message)
+    background_tasks.add_task(_run_orchestrator, ticket.id, body.customer_message, body.order_id)
 
     return IngestResponse(ticket_id=ticket.id)
 
@@ -87,19 +86,17 @@ async def override_ticket(ticket_id: str, body: OverrideRequest):
     return {"ok": True, "status": event_bus.tickets[ticket_id]["status"]}
 
 
-async def _stub_orchestrator(ticket_id: str, message: str):
-    """
-    Stub fired until P2 wires the real orchestrator.
-    Emits a single event so the SSE stream is testable immediately.
-    """
-    import asyncio
-    await asyncio.sleep(1)
-    event = AgentEvent(
-        ticket_id=ticket_id,
-        agent="orchestrator",
-        action="ticket_received",
-        reasoning=f"Ticket reçu et en cours d'analyse : « {message[:80]} »",
-        data={"message_preview": message[:80]},
-    )
-    event_bus.tickets[ticket_id]["status"] = "in_progress"
-    await event_bus.publish(event)
+async def _run_orchestrator(ticket_id: str, message: str, order_id: str):
+    from agents.orchestrator import run as orchestrator_run
+    try:
+        await orchestrator_run(ticket_id, message, order_id)
+    except Exception as e:
+        event = AgentEvent(
+            ticket_id=ticket_id,
+            agent="orchestrator",
+            action="error",
+            reasoning=f"Erreur inattendue : {str(e)}. Escalade vers un humain.",
+            requires_human=True,
+        )
+        event_bus.tickets[ticket_id]["status"] = "escalated"
+        await event_bus.publish(event)
