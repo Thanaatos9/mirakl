@@ -3,7 +3,7 @@ DeliveryAgent — gère les colis expédiés mais non reçus.
 TODO P2 : implémenter avec check_carrier_status + open_loss_declaration
 """
 from agents import tools as t
-from services import event_bus
+from services import event_bus, db
 
 
 async def run(ticket_id: str, order_id: str, customer_id: str):
@@ -41,9 +41,9 @@ async def run(ticket_id: str, order_id: str, customer_id: str):
             action="customer_notified",
             reasoning=f"Colis en transit — client informé. Statut : {carrier_status.get('last_event')}",
         )
-        event_bus.tickets[ticket_id]["status"] = "resolved"
+        db.update_ticket(ticket_id, {"status": "resolved"})
     else:
-        event_bus.tickets[ticket_id]["status"] = "awaiting_human"
+        db.update_ticket(ticket_id, {"status": "awaiting_human"})
         await t.emit_event(
             ticket_id=ticket_id,
             agent="delivery",

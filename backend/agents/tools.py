@@ -66,15 +66,15 @@ async def emit_event(ticket_id: str, agent: str, action: str, reasoning: str,
 async def request_refund_validation(ticket_id: str, order_id: str,
                                     amount: float, reason: str,
                                     agent_reasoning: str) -> dict:
+    from services import db
     validation = HumanValidation(
         ticket_id=ticket_id,
         amount=amount,
         reason=reason,
         agent_reasoning=agent_reasoning,
     )
-    event_bus.validations[validation.id] = validation.model_dump()
-    event_bus.tickets[ticket_id]["status"] = "awaiting_human"
-    event_bus.tickets[ticket_id]["human_validation_id"] = validation.id
+    db.save_validation(validation.model_dump())
+    db.update_ticket(ticket_id, {"status": "awaiting_human", "human_validation_id": validation.id})
 
     await emit_event(
         ticket_id=ticket_id,

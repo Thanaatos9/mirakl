@@ -20,9 +20,9 @@ app.include_router(demo.router)
 
 @app.get("/health")
 async def health():
-    from services.event_bus import tickets as t, validations as v
+    from services.db import list_tickets, list_validations
     return {
         "status": "ok",
-        "tickets": len(t),
-        "validations": len(v),
+        "tickets": len(list_tickets()),
+        "validations": len(list_validations(status="pending")),
     }
