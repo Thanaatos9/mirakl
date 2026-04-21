@@ -76,8 +76,8 @@ const AGENT_ACTIONS = [
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accentColor": "#3b82f6",
   "agentColor": "#8b5cf6",
-  "companyName": "Fanny Great Boutique",
-  "agentName": "Aria"
+  "companyName": "SportPlus Pro",
+  "agentName": "Eugenia"
 }/*EDITMODE-END*/;
 
 // ── ICONS (SVG inline) ────────────────────────────────────────────────────────
@@ -154,10 +154,11 @@ const KpiCard = ({label, value, sub, color, icon, trend}) => (
 const Sidebar = ({page, setPage, tweaks}) => {
   const nav = [
     {id:'home',label:'Accueil',icon:'home'},
-    {id:'tickets',label:'Tickets SAV',icon:'inbox', badge:3},
+    {id:'tickets',label:'Tickets SAV',icon:'inbox'},
     {id:'flux',label:'Flux Live',icon:'zap'},
-    {id:'validations',label:'Validations',icon:'check', badge:4},
+    {id:'validations',label:'Validations',icon:'check'},
     {id:'agent',label:'Agent IA',icon:'brain'},
+    {id:'demo',label:'🎬 Démo',icon:'send', demo:true},
     {id:'__sep__',label:'',icon:''},
     {id:'marketplace',label:'🏪 Marketplace',icon:'eye', marketplace:true},
   ];
@@ -338,6 +339,14 @@ const StatRow = ({label, value, pct, color}) => (
 // ── HOME PAGE ────────────────────────────────────────────────────────────────
 const HomePage = ({setPage, setSelectedTicket, tweaks}) => {
   const [agentToggle, setAgentToggle] = useState(true);
+  const [liveStats, setLiveStats] = useState(null);
+
+  useEffect(() => {
+    const load = () => fetch('/marketplace/stats').then(r=>r.json()).then(setLiveStats).catch(()=>{});
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, []);
   return (
     <div style={{flex:1,overflowY:'auto'}}>
       <TopBar title="Accueil" subtitle={`Lundi 21 avril 2026`} tweaks={tweaks}/>
@@ -349,8 +358,8 @@ const HomePage = ({setPage, setSelectedTicket, tweaks}) => {
               <Icon name="brain" size={22} color="#c4b5fd"/>
             </div>
             <div>
-              <div style={{color:'#e0d9ff',fontWeight:700,fontSize:15}}>{tweaks.agentName} est en train de traiter {TICKETS.filter(t=>t.status!=='resolved').length} tickets</div>
-              <div style={{color:'#a78bfa',fontSize:12,marginTop:2}}>Dernière action il y a 3 min — Étiquette retour générée pour TK-4820</div>
+              <div style={{color:'#e0d9ff',fontWeight:700,fontSize:15}}>{tweaks.agentName} est en train de traiter {liveStats ? (liveStats.total_tickets - (liveStats.by_status?.resolved||0)) : TICKETS.filter(t=>t.status!=='resolved').length} tickets</div>
+              <div style={{color:'#a78bfa',fontSize:12,marginTop:2}}>{liveStats ? `Taux auto-résolution : ${liveStats.ai_resolution_rate}% — ${liveStats.total_tickets} tickets au total` : 'Dernière action il y a 3 min — Étiquette retour générée pour TK-4820'}</div>
             </div>
           </div>
           <div style={{display:'flex',gap:10}}>
@@ -366,10 +375,10 @@ const HomePage = ({setPage, setSelectedTicket, tweaks}) => {
 
         {/* KPIs */}
         <div style={{display:'flex',gap:14,marginBottom:24,flexWrap:'wrap'}}>
-          <KpiCard label="Tickets ouverts" value="4" sub="2 haute priorité" color="#3b82f6" icon={<Icon name="inbox" size={18} color={tweaks.accentColor}/>} trend={-12}/>
-          <KpiCard label="En attente réponse" value="2" sub="Client en attente" color="#f59e0b" icon={<Icon name="eye" size={18} color="#f59e0b"/>} trend={5}/>
-          <KpiCard label="Escalades actives" value="1" sub="Remboursement Fnac" color="#ef4444" icon={<Icon name="zap" size={18} color="#ef4444"/>} trend={0}/>
-          <KpiCard label="Tps moyen réponse" value="4 min" sub="Agent IA (SLA: 15 min)" color="#10b981" icon={<Icon name="trend" size={18} color="#10b981"/>} trend={-28}/>
+          <KpiCard label="Tickets total" value={liveStats ? String(liveStats.total_tickets) : '—'} sub={liveStats ? `${liveStats.by_status?.escalated||0} escaladés` : 'chargement…'} color="#3b82f6" icon={<Icon name="inbox" size={18} color={tweaks.accentColor}/>}/>
+          <KpiCard label="En attente validation" value={liveStats ? String(liveStats.by_status?.awaiting_human||0) : '—'} sub="Validation humaine requise" color="#f59e0b" icon={<Icon name="eye" size={18} color="#f59e0b"/>}/>
+          <KpiCard label="Escalades actives" value={liveStats ? String(liveStats.by_status?.escalated||0) : '—'} sub="Intervention requise" color="#ef4444" icon={<Icon name="zap" size={18} color="#ef4444"/>}/>
+          <KpiCard label="Taux auto-résolution" value={liveStats ? `${liveStats.ai_resolution_rate}%` : '—'} sub={liveStats ? `${liveStats.by_status?.resolved||0} résolus automatiquement` : 'chargement…'} color="#10b981" icon={<Icon name="trend" size={18} color="#10b981"/>}/>
         </div>
 
         {/* Charts row */}
@@ -1121,6 +1130,31 @@ const MP_CRITICAL = TICKETS.filter(t=>t.status==='escalated');
 
 const MarketplacePage = ({tweaks}) => {
   const violet = '#8b5cf6';
+  const [mpStats, setMpStats] = useState(MP_STATS);
+  const [mpMerchants, setMpMerchants] = useState(MP_MERCHANTS);
+
+  useEffect(() => {
+    const load = () => {
+      fetch('/marketplace/stats').then(r=>r.json()).then(d=>{
+        setMpStats({
+          totalTickets: d.total_tickets,
+          resolved: d.resolved,
+          escalated: d.escalated,
+          slaBreaches: d.sla_breaches,
+          totalAmount: d.total_amount,
+          aiRate: d.ai_resolution_rate,
+          byType: Object.entries(d.by_type||{}).map(([l,v],i)=>({l,v,c:['#f59e0b','#ef4444','#8b5cf6','#10b981','#3b82f6','#94a3b8'][i]||'#94a3b8'})),
+        });
+      }).catch(()=>{});
+      fetch('/marketplace/merchants').then(r=>r.json()).then(d=>{
+        setMpMerchants(d.map(m=>({name:m.merchant_name,total:m.total,resolved:m.resolved,escalated:m.escalated,slaBreaches:m.sla_breaches,amount:m.total_amount,rate:m.resolution_rate})));
+      }).catch(()=>{});
+    };
+    load();
+    const id = setInterval(load, 6000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div style={{flex:1,overflowY:'auto'}}>
       <TopBar title="Vue Marketplace" subtitle="Agrégé tous marchands — Lecture seule" tweaks={tweaks}>
@@ -1143,24 +1177,24 @@ const MarketplacePage = ({tweaks}) => {
 
         {/* KPIs */}
         <div style={{display:'flex',gap:14,marginBottom:24,flexWrap:'wrap'}}>
-          <KpiCard label="Total tickets" value={String(MP_STATS.totalTickets)} sub={`${MP_STATS.escalated} escaladés`} color="#3b82f6" icon={<Icon name="inbox" size={18} color="#3b82f6"/>}/>
-          <KpiCard label="Résolution IA" value={`${MP_STATS.aiRate}%`} sub={`${MP_STATS.resolved} résolus auto`} color="#10b981" icon={<Icon name="brain" size={18} color="#10b981"/>} trend={5}/>
-          <KpiCard label="SLA dépassés" value={String(MP_STATS.slaBreaches)} sub="Tous marchands" color="#ef4444" icon={<Icon name="zap" size={18} color="#ef4444"/>}/>
-          <KpiCard label="Montant traité" value={`${MP_STATS.totalAmount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'})}`} sub="Volume total" color="#8b5cf6" icon={<Icon name="trend" size={18} color="#8b5cf6"/>}/>
+          <KpiCard label="Total tickets" value={String(mpStats.totalTickets)} sub={`${mpStats.escalated} escaladés`} color="#3b82f6" icon={<Icon name="inbox" size={18} color="#3b82f6"/>}/>
+          <KpiCard label="Résolution IA" value={`${mpStats.aiRate}%`} sub={`${mpStats.resolved} résolus auto`} color="#10b981" icon={<Icon name="brain" size={18} color="#10b981"/>}/>
+          <KpiCard label="SLA dépassés" value={String(mpStats.slaBreaches)} sub="Tous marchands" color="#ef4444" icon={<Icon name="zap" size={18} color="#ef4444"/>}/>
+          <KpiCard label="Montant traité" value={`${mpStats.totalAmount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'})}`} sub="Volume total" color="#8b5cf6" icon={<Icon name="trend" size={18} color="#8b5cf6"/>}/>
         </div>
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:24}}>
           {/* Distribution par type */}
           <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px'}}>
             <div style={{fontSize:12,fontWeight:700,color:'#0f172a',marginBottom:16,textTransform:'uppercase',letterSpacing:.5}}>Distribution par type</div>
-            {MP_STATS.byType.map(t=>(
+            {mpStats.byType.map(t=>(
               <div key={t.l} style={{marginBottom:10}}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
                   <span style={{fontSize:12,color:'#475569'}}>{t.l}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:'#0f172a'}}>{t.v} ({Math.round(t.v/MP_STATS.totalTickets*100)}%)</span>
+                  <span style={{fontSize:12,fontWeight:700,color:'#0f172a'}}>{t.v} ({mpStats.totalTickets>0?Math.round(t.v/mpStats.totalTickets*100):0}%)</span>
                 </div>
                 <div style={{height:6,background:'#f1f5f9',borderRadius:99}}>
-                  <div style={{width:`${Math.round(t.v/MP_STATS.totalTickets*100)}%`,height:'100%',background:t.c,borderRadius:99,transition:'width .6s ease'}}/>
+                  <div style={{width:`${mpStats.totalTickets>0?Math.round(t.v/mpStats.totalTickets*100):0}%`,height:'100%',background:t.c,borderRadius:99,transition:'width .6s ease'}}/>
                 </div>
               </div>
             ))}
@@ -1174,7 +1208,7 @@ const MarketplacePage = ({tweaks}) => {
                 {['Marchand','Tickets','IA %','SLA ⚠️','Montant'].map(h=><th key={h} style={{padding:'8px 10px',textAlign:h==='Marchand'?'left':'right',fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:.5}}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {MP_MERCHANTS.map(m=>(
+                {mpMerchants.map(m=>(
                   <tr key={m.name} style={{borderTop:'1px solid #f8fafc'}}>
                     <td style={{padding:'10px',fontSize:13,fontWeight:600,color:'#0f172a'}}>{m.name}</td>
                     <td style={{padding:'10px',fontSize:12,textAlign:'right',color:'#334155'}}>{m.total}</td>
@@ -1228,6 +1262,174 @@ const MarketplacePage = ({tweaks}) => {
   );
 };
 
+// ── DEMO PAGE ─────────────────────────────────────────────────────────────────
+const DemoPage = ({setPage, tweaks}) => {
+  const [scenarios, setScenarios] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(null);
+  const [simulating, setSimulating] = useState(new Set());
+  const [resetting, setResetting] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast(null),3200); };
+
+  const loadTickets = () => fetch('/tickets').then(r=>r.json()).then(setTickets).catch(()=>{});
+
+  useEffect(() => {
+    fetch('/demo/scenarios').then(r=>r.json()).then(setScenarios).catch(()=>{});
+    loadTickets();
+    const id = setInterval(loadTickets, 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleLoad = async (sid) => {
+    setLoading(sid);
+    try {
+      const r = await fetch(`/demo/load-scenario/${sid}`, {method:'POST'});
+      const d = await r.json();
+      showToast(`Scénario ${sid.toUpperCase()} chargé — ${d.tickets_created.length} tickets créés`);
+      await loadTickets();
+    } catch { showToast('Erreur lors du chargement', false); }
+    finally { setLoading(null); }
+  };
+
+  const handleSimulate = async (ticketId) => {
+    setSimulating(s => { const n=new Set(s); n.add(ticketId); return n; });
+    try {
+      await fetch(`/demo/simulate-flow/${ticketId}?delay_ms=600`, {method:'POST'});
+      showToast('Flow simulé — validation créée');
+    } catch { showToast('Erreur simulation', false); }
+    finally {
+      setSimulating(s => { const n=new Set(s); n.delete(ticketId); return n; });
+      await loadTickets();
+    }
+  };
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      await fetch('/demo/reset', {method:'POST'});
+      setTickets([]);
+      showToast('Base réinitialisée');
+    } catch { showToast('Erreur reset', false); }
+    finally { setResetting(false); }
+  };
+
+  const icons = {A:'🟢',B:'🔵',C:'🔴'};
+  const statusColor = {pending:'#94a3b8',in_progress:'#3b82f6',awaiting_human:'#f59e0b',resolved:'#10b981',escalated:'#ef4444'};
+  const statusLabel = {pending:'En attente',in_progress:'En cours',awaiting_human:'Validation requise',resolved:'Résolu',escalated:'Escaladé'};
+
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title="Panneau Démo" subtitle="Charge un scénario · Simule les agents · Valide les remboursements" tweaks={tweaks}>
+        <button onClick={handleReset} disabled={resetting} style={{padding:'6px 14px',borderRadius:8,border:'1.5px solid #fee2e2',background:'#fff',color:'#ef4444',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans',opacity:resetting?0.5:1}}>
+          {resetting?'Reset…':'🗑 Réinitialiser'}
+        </button>
+      </TopBar>
+      {toast && (
+        <div style={{position:'fixed',bottom:24,right:24,zIndex:999,background:toast.ok?'#064e3b':'#7f1d1d',color:'#fff',padding:'12px 20px',borderRadius:12,fontSize:13,fontWeight:600,boxShadow:'0 8px 24px rgba(0,0,0,.2)',animation:'slide-in .2s ease'}}>
+          {toast.msg}
+        </div>
+      )}
+      <div style={{padding:28}}>
+
+        {/* Étape 1 */}
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#94a3b8',letterSpacing:1,textTransform:'uppercase',marginBottom:14}}>Étape 1 · Choisir un scénario</div>
+          {scenarios.length===0 ? (
+            <div style={{fontSize:13,color:'#94a3b8',fontStyle:'italic'}}>Chargement des scénarios…</div>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+              {scenarios.map(s=>(
+                <div key={s.id} style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px',display:'flex',flexDirection:'column',gap:14,boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+                  <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                    <span style={{fontSize:22,lineHeight:1}}>{icons[s.id.toUpperCase()]||'⚪'}</span>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{s.name}</div>
+                      <div style={{fontSize:11,color:'#94a3b8',marginTop:3,lineHeight:1.4}}>{s.description}</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>handleLoad(s.id)} disabled={!!loading} style={{padding:'9px',borderRadius:8,background:'#0f172a',border:'none',color:'#fff',fontSize:12,fontWeight:700,cursor:loading?'not-allowed':'pointer',fontFamily:'DM Sans',opacity:loading?0.6:1,transition:'opacity .15s'}}>
+                    {loading===s.id?'Chargement…':`Charger scénario ${s.id.toUpperCase()}`}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Étape 2 */}
+        <div style={{marginBottom:28}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#94a3b8',letterSpacing:1,textTransform:'uppercase',marginBottom:14}}>
+            Étape 2 · Simuler les agents ({tickets.length} ticket{tickets.length!==1?'s':''})
+          </div>
+          {tickets.length===0 ? (
+            <div style={{background:'#fff',borderRadius:12,border:'2px dashed #e2e8f0',padding:40,textAlign:'center',color:'#94a3b8',fontSize:13}}>
+              Aucun ticket — charge un scénario ci-dessus pour commencer
+            </div>
+          ) : (
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+              {tickets.map((t,i)=>{
+                const sc = statusColor[t.status]||'#94a3b8';
+                const sl = statusLabel[t.status]||t.status;
+                const isSim = simulating.has(t.id);
+                return (
+                  <div key={t.id} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',borderTop:i>0?'1px solid #f8fafc':'none'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:13,fontWeight:600,color:'#0f172a'}}>{t.customer?.name}</span>
+                        {t.customer?.is_vip && <span style={{fontSize:9,fontWeight:700,color:'#d97706',background:'#fef3c7',padding:'1px 6px',borderRadius:99}}>VIP</span>}
+                        <span style={{fontSize:11,color:'#94a3b8',fontFamily:'monospace'}}>#{t.order?.id}</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
+                        <span style={{fontSize:11,background:'#f1f5f9',color:'#475569',padding:'2px 8px',borderRadius:6}}>{t.type}</span>
+                        <span style={{fontSize:11,color:'#64748b'}}>{t.order?.total_amount?.toLocaleString('fr-FR',{style:'currency',currency:'EUR'})}</span>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:99,fontSize:11,fontWeight:600,background:sc+'18',color:sc}}>
+                        <span style={{width:6,height:6,borderRadius:'50%',background:sc,display:'inline-block'}}/>
+                        {sl}
+                      </span>
+                      {t.status==='pending' && (
+                        <button onClick={()=>handleSimulate(t.id)} disabled={isSim} style={{padding:'7px 14px',borderRadius:8,background:'#3b82f6',border:'none',color:'#fff',fontSize:11,fontWeight:700,cursor:isSim?'not-allowed':'pointer',fontFamily:'DM Sans',opacity:isSim?0.6:1,whiteSpace:'nowrap'}}>
+                          {isSim?'Simulation…':'▶ Simuler flow'}
+                        </button>
+                      )}
+                      {t.status==='awaiting_human' && (
+                        <button onClick={()=>setPage('validations')} style={{padding:'7px 14px',borderRadius:8,background:'#f59e0b',border:'none',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans',whiteSpace:'nowrap'}}>
+                          Approuver →
+                        </button>
+                      )}
+                      {t.status==='in_progress' && (
+                        <span style={{fontSize:11,color:'#3b82f6',fontWeight:600}}>en cours…</span>
+                      )}
+                      {t.status==='resolved' && (
+                        <span style={{fontSize:11,color:'#10b981',fontWeight:700}}>✓ Résolu</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Étape 3 — conditionnelle */}
+        {tickets.some(t=>t.status==='awaiting_human') && (
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:'#94a3b8',letterSpacing:1,textTransform:'uppercase',marginBottom:14}}>Étape 3 · Approuver les remboursements</div>
+            <button onClick={()=>setPage('validations')} style={{padding:'12px 24px',borderRadius:10,background:'#f59e0b',border:'none',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans',boxShadow:'0 4px 12px rgba(245,158,11,.3)'}}>
+              Aller aux validations →
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 const App = () => {
   const saved = (() => { try { return JSON.parse(localStorage.getItem('mirakl-sav-state')||'{}') } catch{return{}} })();
@@ -1258,6 +1460,7 @@ const App = () => {
         {page==='flux' && <FluxPage setPage={setPage} tweaks={tweaks}/>}
         {page==='validations' && <ValidationsPage tweaks={tweaks}/>}
         {page==='agent' && <AgentPage tweaks={tweaks}/>}
+        {page==='demo' && <DemoPage setPage={setPage} tweaks={tweaks}/>}
         {page==='marketplace' && <MarketplacePage tweaks={tweaks}/>}
         {page==='settings' && <PlaceholderPage title="Paramètres" tweaks={tweaks}/>}
       </div>
