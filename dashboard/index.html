@@ -1,0 +1,1614 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mirakl SAV — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="supabase-bridge.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; font-family: 'DM Sans', sans-serif; }
+  body { background: #f1f5f9; color: #0f172a; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.4)} }
+  @keyframes slide-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes agent-glow { 0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.3)} 50%{box-shadow:0 0 0 6px rgba(139,92,246,0)} }
+  @keyframes slideDown { from{opacity:0;transform:translateY(-14px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── SUPABASE DATA HOOK ───────────────────────────────────────────────────────
+// Charge les données depuis Supabase au mount, subscribe au Realtime.
+// Les composants enfants lisent directement depuis les variables globales.
+let TICKETS = [];
+let AGENT_ACTIONS = [];
+
+function useSupabaseData() {
+  const [rev, setRev] = useState(0);
+  const forceUpdate = useCallback(() => setRev(r => r + 1), []);
+
+  useEffect(() => {
+    // Charger les données initiales
+    loadAllData().then(() => {
+      TICKETS = window.__SUPA_DATA.tickets;
+      AGENT_ACTIONS = window.__SUPA_DATA.actions;
+      forceUpdate();
+    });
+    // Écouter les changements Realtime
+    subscribeRealtime(() => {
+      TICKETS = window.__SUPA_DATA.tickets;
+      AGENT_ACTIONS = window.__SUPA_DATA.actions;
+      forceUpdate();
+    });
+  }, []);
+
+  return {
+    tickets: window.__SUPA_DATA.tickets,
+    actions: window.__SUPA_DATA.actions,
+    validations: window.__SUPA_DATA.validations,
+    fluxEvents: window.__SUPA_DATA.fluxEvents,
+    loaded: window.__SUPA_DATA.loaded,
+    error: window.__SUPA_DATA.error,
+    refresh: () => loadAllData().then(forceUpdate),
+  };
+}
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#3b82f6",
+  "agentColor": "#8b5cf6",
+  "companyName": "Fanny Great Boutique",
+  "agentName": "Aria"
+}/*EDITMODE-END*/;
+
+// ── ICONS (SVG inline) ────────────────────────────────────────────────────────
+const Icon = ({name, size=16, color='currentColor'}) => {
+  const icons = {
+    home: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+    inbox: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>,
+    orders: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+    users: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>,
+    agent: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2"/><path d="M12 2a10 10 0 100 20A10 10 0 0012 2z"/><path d="M12 8v4l3 3"/></svg>,
+    settings: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41"/></svg>,
+    chevron: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>,
+    search: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+    bell: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
+    filter: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+    send: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+    close: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+    arrowLeft: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
+    check: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+    zap: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+    trend: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
+    eye: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+    handoff: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>,
+    brain: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 017 4.5v0A2.5 2.5 0 014.5 7v0A2.5 2.5 0 012 9.5v5A2.5 2.5 0 004.5 17v0A2.5 2.5 0 007 19.5v0A2.5 2.5 0 009.5 22h5a2.5 2.5 0 002.5-2.5v0a2.5 2.5 0 002.5-2.5v0a2.5 2.5 0 002.5-2.5v-5A2.5 2.5 0 0019.5 7v0A2.5 2.5 0 0017 4.5v0A2.5 2.5 0 0014.5 2z"/></svg>,
+  };
+  return icons[name] || null;
+};
+
+// ── BADGE ────────────────────────────────────────────────────────────────────
+const Badge = ({type, label}) => {
+  const map = {
+    open:      {bg:'#dbeafe',color:'#1d4ed8',dot:'#3b82f6'},
+    pending:   {bg:'#fef3c7',color:'#92400e',dot:'#f59e0b'},
+    escalated: {bg:'#fee2e2',color:'#991b1b',dot:'#ef4444'},
+    resolved:  {bg:'#d1fae5',color:'#065f46',dot:'#10b981'},
+    critical:  {bg:'#fee2e2',color:'#991b1b',dot:'#ef4444'},
+    high:      {bg:'#ffedd5',color:'#9a3412',dot:'#f97316'},
+    medium:    {bg:'#fef3c7',color:'#92400e',dot:'#f59e0b'},
+    low:       {bg:'#f1f5f9',color:'#475569',dot:'#94a3b8'},
+  };
+  const s = map[type] || map.low;
+  const labels = {open:'Ouvert',pending:'En attente',escalated:'Escaladé',resolved:'Résolu',critical:'Critique',high:'Haute',medium:'Moyenne',low:'Basse'};
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 8px',borderRadius:99,fontSize:11,fontWeight:600,background:s.bg,color:s.color}}>
+      <span style={{width:6,height:6,borderRadius:'50%',background:s.dot,animation:type==='escalated'?'pulse-dot 1.5s ease infinite':undefined}}/>
+      {label||labels[type]||type}
+    </span>
+  );
+};
+
+// ── KPI CARD ─────────────────────────────────────────────────────────────────
+const KpiCard = ({label, value, sub, color, icon, trend}) => (
+  <div style={{background:'#fff',borderRadius:12,padding:'20px 24px',boxShadow:'0 1px 3px rgba(0,0,0,.06)',border:'1px solid #f1f5f9',flex:1,minWidth:0,animation:'slide-in .3s ease both'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+      <div>
+        <div style={{fontSize:12,color:'#94a3b8',fontWeight:500,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>{label}</div>
+        <div style={{fontSize:32,fontWeight:700,color:'#0f172a',lineHeight:1}}>{value}</div>
+        {sub && <div style={{fontSize:12,color:'#64748b',marginTop:6}}>{sub}</div>}
+      </div>
+      <div style={{width:40,height:40,borderRadius:10,background:color+'18',display:'flex',alignItems:'center',justifyContent:'center',color}}>
+        {icon}
+      </div>
+    </div>
+    {trend !== undefined && (
+      <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #f1f5f9',fontSize:11,color:trend>=0?'#10b981':'#ef4444',display:'flex',alignItems:'center',gap:4}}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points={trend>=0?"22 7 13.5 15.5 8.5 10.5 2 17":"2 7 10.5 15.5 15.5 10.5 22 17"}/></svg>
+        {Math.abs(trend)}% vs hier
+      </div>
+    )}
+  </div>
+);
+
+// ── SIDEBAR ──────────────────────────────────────────────────────────────────
+const Sidebar = ({page, setPage, tweaks}) => {
+  const nav = [
+    {id:'home',label:'Accueil',icon:'home'},
+    {id:'tickets',label:'Tickets SAV',icon:'inbox', badge:3},
+    {id:'flux',label:'Flux Live',icon:'zap'},
+    {id:'validations',label:'Validations',icon:'check', badge:4},
+    {id:'marketplace',label:'Marketplace',icon:'eye'},
+    {id:'agent',label:'Agent IA',icon:'brain'},
+  ];
+  return (
+    <div style={{width:220,flexShrink:0,background:'#0f1629',display:'flex',flexDirection:'column',height:'100vh',position:'sticky',top:0,overflowY:'auto'}}>
+      {/* Logo */}
+      <div style={{padding:'20px 20px 16px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:32,height:32,borderRadius:8,background:tweaks.accentColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:800,color:'#fff'}}>M</div>
+          <div>
+            <div style={{color:'#fff',fontWeight:700,fontSize:13}}>Mirakl SAV</div>
+            <div style={{color:'#64748b',fontSize:11,marginTop:1}}>Agent IA actif</div>
+          </div>
+        </div>
+        <div style={{marginTop:12,padding:'7px 10px',background:'rgba(139,92,246,.12)',border:'1px solid rgba(139,92,246,.2)',borderRadius:8,display:'flex',alignItems:'center',gap:7}}>
+          <div style={{width:7,height:7,borderRadius:'50%',background:tweaks.agentColor,animation:'pulse-dot 2s ease infinite'}}/>
+          <span style={{fontSize:11,color:tweaks.agentColor,fontWeight:600}}>{tweaks.agentName} — En ligne</span>
+        </div>
+      </div>
+      {/* Shop */}
+      <div style={{padding:'12px 20px 8px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+        <div style={{fontSize:10,color:'#475569',fontWeight:600,letterSpacing:.8,textTransform:'uppercase',marginBottom:6}}>Boutique</div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:22,height:22,borderRadius:5,background:'#1e293b',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#94a3b8'}}>FB</div>
+          <span style={{color:'#e2e8f0',fontSize:12,fontWeight:500}}>{tweaks.companyName}</span>
+        </div>
+      </div>
+      {/* Nav */}
+      <nav style={{padding:'10px 10px',flex:1}}>
+        {nav.map(n => {
+          const active = page===n.id;
+          return (
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:'none',cursor:'pointer',
+              background:active?'rgba(59,130,246,.15)':'transparent',
+              color:active?tweaks.accentColor:'#94a3b8',fontWeight:active?600:400,fontSize:13,
+              marginBottom:2,transition:'all .15s ease',fontFamily:'DM Sans',
+            }}>
+              <Icon name={n.icon} size={15} color={active?tweaks.accentColor:'#94a3b8'}/>
+              <span style={{flex:1,textAlign:'left'}}>{n.label}</span>
+              {n.badge && <span style={{background:'#ef4444',color:'#fff',borderRadius:99,fontSize:10,fontWeight:700,padding:'1px 6px'}}>{n.badge}</span>}
+            </button>
+          );
+        })}
+      </nav>
+      {/* Bottom */}
+      <div style={{padding:'12px 10px',borderTop:'1px solid rgba(255,255,255,.06)'}}>
+        <button onClick={()=>setPage('settings')} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:'none',cursor:'pointer',background:page==='settings'?'rgba(59,130,246,.15)':'transparent',color:'#64748b',fontSize:13,fontFamily:'DM Sans'}}>
+          <Icon name="settings" size={15} color="#64748b"/>
+          Paramètres
+        </button>
+        <div style={{marginTop:12,padding:'10px 12px',background:'#1e293b',borderRadius:8}}>
+          <div style={{fontSize:10,color:'#475569',fontWeight:600,marginBottom:4}}>TICKETS RÉSOLUS / 7J</div>
+          <div style={{fontSize:18,fontWeight:700,color:'#e2e8f0'}}>94%</div>
+          <div style={{height:4,background:'#334155',borderRadius:99,marginTop:6}}><div style={{width:'94%',height:'100%',background:tweaks.agentColor,borderRadius:99}}/></div>
+          <div style={{fontSize:10,color:'#64748b',marginTop:4}}>Taux par agent IA</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── TOP BAR ──────────────────────────────────────────────────────────────────
+const TopBar = ({title, subtitle, children, tweaks}) => (
+  <div style={{background:'#fff',borderBottom:'1px solid #f1f5f9',padding:'0 28px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,position:'sticky',top:0,zIndex:10}}>
+    <div>
+      <div style={{fontWeight:700,fontSize:16,color:'#0f172a'}}>{title}</div>
+      {subtitle && <div style={{fontSize:11,color:'#94a3b8'}}>{subtitle}</div>}
+    </div>
+    <div style={{display:'flex',alignItems:'center',gap:12}}>
+      {children}
+      <div style={{position:'relative'}}>
+        <button style={{width:36,height:36,borderRadius:8,border:'1px solid #f1f5f9',background:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>
+          <Icon name="bell" size={16}/>
+        </button>
+        <span style={{position:'absolute',top:4,right:4,width:8,height:8,borderRadius:'50%',background:'#ef4444',border:'2px solid #fff'}}/>
+      </div>
+      <div style={{width:34,height:34,borderRadius:99,background:tweaks.accentColor,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:13}}>F</div>
+    </div>
+  </div>
+);
+
+// ── CHARTS ───────────────────────────────────────────────────────────────────
+const AreaChart = ({data, color, height=80}) => {
+  const w=320, h=height, pad=4;
+  const max = Math.max(...data.map(d=>d.v));
+  const min = Math.min(...data.map(d=>d.v));
+  const range = max - min || 1;
+  const pts = data.map((d,i)=>({
+    x: pad + (i/(data.length-1))*(w-pad*2),
+    y: pad + (1-(d.v-min)/range)*(h-pad*2)
+  }));
+  const line = pts.map((p,i)=>`${i===0?'M':'L'}${p.x},${p.y}`).join(' ');
+  const area = line + ` L${pts[pts.length-1].x},${h} L${pts[0].x},${h} Z`;
+  const gradId = `grad-${color.replace('#','')}`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{width:'100%',height}} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gradId})`}/>
+      <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      {pts.map((p,i)=>(
+        <circle key={i} cx={p.x} cy={p.y} r="3" fill={color} stroke="#fff" strokeWidth="1.5"/>
+      ))}
+    </svg>
+  );
+};
+
+const BarChart = ({data, color, height=100}) => {
+  const w=320, h=height, pad=8, gap=6;
+  const max = Math.max(...data.map(d=>d.v))||1;
+  const bw = (w - pad*2 - gap*(data.length-1)) / data.length;
+  return (
+    <svg viewBox={`0 0 ${w} ${h+20}`} style={{width:'100%',height:height+20}} preserveAspectRatio="none">
+      {data.map((d,i)=>{
+        const bh = (d.v/max)*(h-12);
+        const x = pad + i*(bw+gap);
+        const y = h - bh;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={bw} height={bh} rx="4" fill={color} fillOpacity={d.highlight?1:.45}/>
+            <text x={x+bw/2} y={h+14} textAnchor="middle" fontSize="9" fill="#94a3b8" fontFamily="DM Sans">{d.l}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+const DonutChart = ({segments, size=120}) => {
+  const r=42, cx=60, cy=60, stroke=14;
+  const circ = 2*Math.PI*r;
+  const total = segments.reduce((a,s)=>a+s.v,0)||1;
+  let offset = 0;
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth={stroke}/>
+      {segments.map((s,i)=>{
+        const dash = (s.v/total)*circ;
+        const gap = circ - dash;
+        const el = (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+            stroke={s.color} strokeWidth={stroke}
+            strokeDasharray={`${dash} ${gap}`}
+            strokeDashoffset={-offset}
+            strokeLinecap="round"
+            style={{transition:'stroke-dasharray .6s ease'}}
+          />
+        );
+        offset += dash + 1.5;
+        return el;
+      })}
+      <text x={cx} y={cy-4} textAnchor="middle" fontSize="16" fontWeight="700" fill="#0f172a" fontFamily="DM Sans">{total}</text>
+      <text x={cx} y={cy+12} textAnchor="middle" fontSize="9" fill="#94a3b8" fontFamily="DM Sans">tickets</text>
+    </svg>
+  );
+};
+
+const StatRow = ({label, value, pct, color}) => (
+  <div style={{marginBottom:8}}>
+    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+      <span style={{fontSize:12,color:'#475569'}}>{label}</span>
+      <span style={{fontSize:12,fontWeight:700,color:'#0f172a'}}>{value}</span>
+    </div>
+    <div style={{height:5,background:'#f1f5f9',borderRadius:99}}>
+      <div style={{width:`${pct}%`,height:'100%',background:color,borderRadius:99,transition:'width .6s ease'}}/>
+    </div>
+  </div>
+);
+
+// ── HOME PAGE ────────────────────────────────────────────────────────────────
+const HomePage = ({setPage, setSelectedTicket, tweaks}) => {
+  const [agentToggle, setAgentToggle] = useState(true);
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title="Accueil" subtitle={`Lundi 21 avril 2026`} tweaks={tweaks}/>
+      <div style={{padding:28}}>
+        {/* Agent banner */}
+        <div style={{background:`linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4c1d95 100%)`,borderRadius:14,padding:'20px 24px',marginBottom:24,display:'flex',alignItems:'center',justifyContent:'space-between',animation:'fadeIn .4s ease'}}>
+          <div style={{display:'flex',alignItems:'center',gap:16}}>
+            <div style={{width:44,height:44,borderRadius:12,background:'rgba(139,92,246,.3)',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid rgba(139,92,246,.4)',animation:'agent-glow 3s ease infinite'}}>
+              <Icon name="brain" size={22} color="#c4b5fd"/>
+            </div>
+            <div>
+              <div style={{color:'#e0d9ff',fontWeight:700,fontSize:15}}>{tweaks.agentName} est en train de traiter {TICKETS.filter(t=>t.status!=='resolved').length} tickets</div>
+              <div style={{color:'#a78bfa',fontSize:12,marginTop:2}}>Dernière action il y a 3 min — Étiquette retour générée pour TK-4820</div>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <button onClick={()=>setPage('agent')} style={{padding:'8px 16px',borderRadius:8,border:'1px solid rgba(167,139,250,.4)',background:'rgba(139,92,246,.2)',color:'#c4b5fd',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans'}}>Voir l'activité</button>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderRadius:8,background:agentToggle?'rgba(16,185,129,.15)':'rgba(239,68,68,.15)',border:`1px solid ${agentToggle?'rgba(16,185,129,.3)':'rgba(239,68,68,.3)'}`,cursor:'pointer'}} onClick={()=>setAgentToggle(v=>!v)}>
+              <div style={{width:30,height:16,borderRadius:99,background:agentToggle?'#10b981':'#475569',position:'relative',transition:'background .2s'}}>
+                <div style={{position:'absolute',top:2,left:agentToggle?14:2,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+              </div>
+              <span style={{fontSize:11,color:agentToggle?'#6ee7b7':'#94a3b8',fontWeight:600}}>{agentToggle?'Actif':'Pause'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div style={{display:'flex',gap:14,marginBottom:24,flexWrap:'wrap'}}>
+          <KpiCard label="Tickets ouverts" value="4" sub="2 haute priorité" color="#3b82f6" icon={<Icon name="inbox" size={18} color={tweaks.accentColor}/>} trend={-12}/>
+          <KpiCard label="En attente réponse" value="2" sub="Client en attente" color="#f59e0b" icon={<Icon name="eye" size={18} color="#f59e0b"/>} trend={5}/>
+          <KpiCard label="Escalades actives" value="1" sub="Remboursement Fnac" color="#ef4444" icon={<Icon name="zap" size={18} color="#ef4444"/>} trend={0}/>
+          <KpiCard label="Tps moyen réponse" value="4 min" sub="Agent IA (SLA: 15 min)" color="#10b981" icon={<Icon name="trend" size={18} color="#10b981"/>} trend={-28}/>
+        </div>
+
+        {/* Charts row */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:24}}>
+          {/* Volume 7 jours */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:'#0f172a'}}>Volume tickets</div>
+                <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>7 derniers jours</div>
+              </div>
+              <span style={{fontSize:11,color:'#10b981',fontWeight:600,background:'#d1fae5',padding:'2px 8px',borderRadius:99}}>−12%</span>
+            </div>
+            <AreaChart color="#3b82f6" height={80} data={[
+              {l:'L',v:8},{l:'M',v:14},{l:'M',v:11},{l:'J',v:18},{l:'V',v:9},{l:'S',v:5},{l:'D',v:6}
+            ]}/>
+            <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
+              {['L','M','Me','J','V','S','D'].map((d,i)=><span key={i} style={{fontSize:9,color:'#94a3b8',flex:1,textAlign:'center'}}>{d}</span>)}
+            </div>
+          </div>
+
+          {/* Temps de réponse */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:'#0f172a'}}>Temps de réponse</div>
+                <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>Moyenne en minutes</div>
+              </div>
+              <span style={{fontSize:11,color:'#10b981',fontWeight:600,background:'#d1fae5',padding:'2px 8px',borderRadius:99}}>−28%</span>
+            </div>
+            <BarChart color="#8b5cf6" height={90} data={[
+              {l:'L',v:18},{l:'M',v:14},{l:'M',v:22},{l:'J',v:8},{l:'V',v:6},{l:'S',v:4},{l:'D',v:4,highlight:true}
+            ]}/>
+          </div>
+
+          {/* Catégories */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:600,color:'#0f172a'}}>Par catégorie</div>
+              <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>Cette semaine</div>
+            </div>
+            <div style={{display:'flex',gap:14,alignItems:'center'}}>
+              <DonutChart size={110} segments={[
+                {v:12,color:'#3b82f6'},{v:8,color:'#8b5cf6'},{v:6,color:'#f59e0b'},{v:4,color:'#10b981'},{v:2,color:'#ef4444'}
+              ]}/>
+              <div style={{flex:1}}>
+                {[{l:'Livraison',v:12,c:'#3b82f6'},{l:'Produit',v:8,c:'#8b5cf6'},{l:'Remboursement',v:6,c:'#f59e0b'},{l:'Échange',v:4,c:'#10b981'},{l:'Facturation',v:2,c:'#ef4444'}].map(s=>(
+                  <StatRow key={s.l} label={s.l} value={s.v} pct={Math.round(s.v/32*100)} color={s.c}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Satisfaction + SLA row */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:24}}>
+          {/* Satisfaction */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:'#0f172a'}}>Satisfaction client (CSAT)</div>
+                <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>Sur 7 jours glissants</div>
+              </div>
+              <span style={{fontSize:22,fontWeight:800,color:'#10b981'}}>4.7<span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>/5</span></span>
+            </div>
+            <AreaChart color="#10b981" height={70} data={[
+              {v:4.2},{v:4.5},{v:4.3},{v:4.6},{v:4.8},{v:4.7},{v:4.7}
+            ]}/>
+            <div style={{display:'flex',gap:16,marginTop:12}}>
+              {[{emoji:'😄',label:'Très satisfait',pct:62},{emoji:'🙂',label:'Satisfait',pct:24},{emoji:'😐',label:'Neutre',pct:10},{emoji:'😞',label:'Insatisfait',pct:4}].map(r=>(
+                <div key={r.label} style={{textAlign:'center',flex:1}}>
+                  <div style={{fontSize:16}}>{r.emoji}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginTop:2}}>{r.pct}%</div>
+                  <div style={{fontSize:9,color:'#94a3b8',marginTop:1,lineHeight:1.2}}>{r.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* SLA compliance */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'18px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.05)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:'#0f172a'}}>Conformité SLA</div>
+                <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>Par marketplace</div>
+              </div>
+            </div>
+            {[
+              {name:'Amazon',pct:97,color:'#f59e0b',tickets:18},
+              {name:'Fnac',pct:89,color:'#3b82f6',tickets:9},
+              {name:'Cdiscount',pct:94,color:'#10b981',tickets:5},
+            ].map(m=>(
+              <div key={m.name} style={{marginBottom:14}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:12,fontWeight:600,color:'#0f172a'}}>{m.name}</span>
+                    <span style={{fontSize:10,color:'#94a3b8'}}>{m.tickets} tickets</span>
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,color:m.pct>=95?'#10b981':m.pct>=85?'#f59e0b':'#ef4444'}}>{m.pct}%</span>
+                </div>
+                <div style={{height:8,background:'#f1f5f9',borderRadius:99}}>
+                  <div style={{width:`${m.pct}%`,height:'100%',background:m.color,borderRadius:99,transition:'width .8s ease'}}/>
+                </div>
+              </div>
+            ))}
+            <div style={{marginTop:8,padding:'10px 12px',background:'#f8fafc',borderRadius:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontSize:11,color:'#64748b'}}>Taux global SLA</span>
+              <span style={{fontSize:15,fontWeight:800,color:'#10b981'}}>94%</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 360px',gap:20}}>
+          {/* Recent tickets */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden'}}>
+            <div style={{padding:'16px 20px',borderBottom:'1px solid #f8fafc',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontWeight:700,fontSize:14,color:'#0f172a'}}>Tickets récents</span>
+              <button onClick={()=>setPage('tickets')} style={{fontSize:12,color:tweaks.accentColor,background:'none',border:'none',cursor:'pointer',fontWeight:600,fontFamily:'DM Sans'}}>Voir tous →</button>
+            </div>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{background:'#f8fafc'}}>
+                {['ID','Client','Sujet','Statut','Priorité','SLA'].map(h=><th key={h} style={{padding:'10px 16px',textAlign:'left',fontSize:11,fontWeight:600,color:'#94a3b8',letterSpacing:.5,textTransform:'uppercase'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {TICKETS.slice(0,5).map((t,i)=>(
+                  <tr key={t.id} onClick={()=>{setSelectedTicket(t);setPage('ticket-detail');}} style={{borderTop:'1px solid #f8fafc',cursor:'pointer',transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background=''}>
+                    <td style={{padding:'12px 16px',fontSize:12,fontFamily:'DM Mono',color:'#3b82f6',fontWeight:500}}>{t.id}</td>
+                    <td style={{padding:'12px 16px'}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'#0f172a'}}>{t.client}</div>
+                      <div style={{fontSize:11,color:'#94a3b8'}}>{t.marketplace}</div>
+                    </td>
+                    <td style={{padding:'12px 16px',fontSize:12,color:'#334155',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.subject}</td>
+                    <td style={{padding:'12px 16px'}}><Badge type={t.status}/></td>
+                    <td style={{padding:'12px 16px'}}><Badge type={t.priority}/></td>
+                    <td style={{padding:'12px 16px',fontSize:11,color:t.sla==='Dépassé'?'#ef4444':t.sla==='Résolu'?'#10b981':'#f59e0b',fontWeight:600}}>{t.sla}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Agent activity */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden'}}>
+            <div style={{padding:'16px 20px',borderBottom:'1px solid #f8fafc',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:tweaks.agentColor,animation:'pulse-dot 2s ease infinite'}}/>
+                <span style={{fontWeight:700,fontSize:14,color:'#0f172a'}}>Activité {tweaks.agentName}</span>
+              </div>
+              <button onClick={()=>setPage('agent')} style={{fontSize:12,color:tweaks.accentColor,background:'none',border:'none',cursor:'pointer',fontWeight:600,fontFamily:'DM Sans'}}>Tout voir →</button>
+            </div>
+            <div style={{padding:'8px 0',maxHeight:360,overflowY:'auto'}}>
+              {AGENT_ACTIONS.map(a=>(
+                <div key={a.id} style={{padding:'10px 20px',borderBottom:'1px solid #f8fafc',display:'flex',gap:10,alignItems:'flex-start',animation:'slide-in .3s ease both'}}>
+                  <div style={{width:28,height:28,borderRadius:8,background:'#f8fafc',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{a.icon}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:'#334155',fontWeight:500}}>{a.action}</div>
+                    <div style={{display:'flex',justifyContent:'space-between',marginTop:3}}>
+                      <span style={{fontSize:10,fontFamily:'DM Mono',color:tweaks.accentColor}}>{a.ticket}</span>
+                      <span style={{fontSize:10,color:'#94a3b8'}}>{a.ts}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── TICKETS PAGE ─────────────────────────────────────────────────────────────
+const TicketsPage = ({setPage, setSelectedTicket, tweaks}) => {
+  const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const filtered = TICKETS.filter(t => {
+    const q = search.toLowerCase();
+    const matchQ = !q || t.client.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.subject.toLowerCase().includes(q);
+    const matchS = filterStatus==='all' || t.status===filterStatus;
+    const matchP = filterPriority==='all' || t.priority===filterPriority;
+    return matchQ && matchS && matchP;
+  });
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title="Tickets SAV" subtitle={`${filtered.length} tickets • ${TICKETS.filter(t=>t.assignee==='Agent IA').length} gérés par ${tweaks.agentName}`} tweaks={tweaks}/>
+      <div style={{padding:28}}>
+        {/* Filters */}
+        <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'14px 20px',marginBottom:16,display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:200,display:'flex',alignItems:'center',gap:8,background:'#f8fafc',border:'1px solid #f1f5f9',borderRadius:8,padding:'7px 12px'}}>
+            <Icon name="search" size={14} color="#94a3b8"/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un ticket, client…" style={{border:'none',background:'none',outline:'none',fontSize:13,color:'#334155',fontFamily:'DM Sans',width:'100%'}}/>
+          </div>
+          {[{label:'Statut',val:filterStatus,set:setFilterStatus,opts:[{v:'all',l:'Tous statuts'},{v:'open',l:'Ouverts'},{v:'pending',l:'En attente'},{v:'escalated',l:'Escaladés'},{v:'resolved',l:'Résolus'}]},
+            {label:'Priorité',val:filterPriority,set:setFilterPriority,opts:[{v:'all',l:'Toutes priorités'},{v:'critical',l:'Critique'},{v:'high',l:'Haute'},{v:'medium',l:'Moyenne'},{v:'low',l:'Basse'}]}].map(f=>(
+            <select key={f.label} value={f.val} onChange={e=>f.set(e.target.value)} style={{padding:'7px 12px',borderRadius:8,border:'1px solid #f1f5f9',background:'#f8fafc',fontSize:12,color:'#334155',fontFamily:'DM Sans',cursor:'pointer',outline:'none'}}>
+              {f.opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          ))}
+          <div style={{fontSize:12,color:'#94a3b8',fontStyle:'italic'}}>{filtered.length} résultats</div>
+        </div>
+
+        {/* Table */}
+        <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr style={{background:'#f8fafc'}}>
+              {['ID','Client & Marketplace','Sujet','Catégorie','Statut','Priorité','Assigné à','SLA',''].map(h=><th key={h} style={{padding:'11px 16px',textAlign:'left',fontSize:11,fontWeight:600,color:'#94a3b8',letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap'}}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {filtered.map(t=>(
+                <tr key={t.id} onClick={()=>{setSelectedTicket(t);setPage('ticket-detail');}} style={{borderTop:'1px solid #f8fafc',cursor:'pointer',transition:'background .1s'}} onMouseEnter={e=>e.currentTarget.style.background='#fafbff'} onMouseLeave={e=>e.currentTarget.style.background=''}>
+                  <td style={{padding:'13px 16px',fontSize:12,fontFamily:'DM Mono',color:'#3b82f6',fontWeight:500,whiteSpace:'nowrap'}}>{t.id}</td>
+                  <td style={{padding:'13px 16px'}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'#0f172a'}}>{t.client}</div>
+                    <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{t.marketplace} · {t.email}</div>
+                  </td>
+                  <td style={{padding:'13px 16px',fontSize:12,color:'#334155',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.subject}</td>
+                  <td style={{padding:'13px 16px'}}><span style={{fontSize:11,background:'#f1f5f9',color:'#475569',padding:'3px 8px',borderRadius:6,fontWeight:500}}>{t.category}</span></td>
+                  <td style={{padding:'13px 16px'}}><Badge type={t.status}/></td>
+                  <td style={{padding:'13px 16px'}}><Badge type={t.priority}/></td>
+                  <td style={{padding:'13px 16px'}}>
+                    {t.assignee==='Agent IA' ? (
+                      <span style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:tweaks.agentColor,fontWeight:600}}>
+                        <div style={{width:6,height:6,borderRadius:'50%',background:tweaks.agentColor,animation:'pulse-dot 2s ease infinite'}}/>
+                        {tweaks.agentName}
+                      </span>
+                    ) : (
+                      <span style={{fontSize:11,color:'#64748b',fontWeight:500}}>{t.assignee}</span>
+                    )}
+                  </td>
+                  <td style={{padding:'13px 16px',fontSize:11,color:t.sla==='Dépassé'?'#ef4444':t.sla==='Résolu'?'#10b981':'#f59e0b',fontWeight:600,whiteSpace:'nowrap'}}>{t.sla}</td>
+                  <td style={{padding:'13px 16px'}}><span style={{fontSize:11,color:tweaks.accentColor,fontWeight:600}}>Voir →</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length===0 && <div style={{padding:40,textAlign:'center',color:'#94a3b8',fontSize:13}}>Aucun ticket trouvé</div>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── TICKET DETAIL PAGE ────────────────────────────────────────────────────────
+const TicketDetail = ({ticket, setPage, tweaks}) => {
+  const [reply, setReply] = useState('');
+  const [takeOver, setTakeOver] = useState(false);
+  const [messages, setMessages] = useState(ticket.messages);
+  const [sending, setSending] = useState(false);
+  const [agentTyping, setAgentTyping] = useState(false);
+  const bottomRef = useRef();
+
+  const sendReply = () => {
+    if(!reply.trim()) return;
+    const newMsg = {role:takeOver?'human':'client',text:reply,ts:new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'})};
+    setMessages(m=>[...m,newMsg]);
+    setReply('');
+    setSending(true);
+    if(!takeOver) {
+      setTimeout(()=>{
+        setAgentTyping(true);
+        setSending(false);
+        setTimeout(()=>{
+          setAgentTyping(false);
+          setMessages(m=>[...m,{role:'agent',ai:true,text:"Merci pour votre message. Je prends en charge votre demande et reviens vers vous dans les plus brefs délais.",ts:new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'})}]);
+        },2000);
+      },500);
+    } else {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title={ticket.id} subtitle={`${ticket.client} · ${ticket.marketplace}`} tweaks={tweaks}>
+        <button onClick={()=>setPage('tickets')} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:'1px solid #e2e8f0',background:'#fff',fontSize:12,color:'#64748b',cursor:'pointer',fontFamily:'DM Sans'}}>
+          <Icon name="arrowLeft" size={13} color="#64748b"/> Retour
+        </button>
+      </TopBar>
+
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 300px',overflow:'hidden'}}>
+        {/* Conversation */}
+        <div style={{display:'flex',flexDirection:'column',borderRight:'1px solid #f1f5f9',overflow:'hidden'}}>
+          {/* Ticket meta */}
+          <div style={{padding:'14px 24px',background:'#fff',borderBottom:'1px solid #f1f5f9',display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+            <Badge type={ticket.status}/>
+            <Badge type={ticket.priority}/>
+            <span style={{fontSize:11,background:'#f1f5f9',color:'#475569',padding:'3px 8px',borderRadius:6}}>{ticket.category}</span>
+            <span style={{fontSize:11,color:'#94a3b8',marginLeft:'auto'}}>Commande: <span style={{fontFamily:'DM Mono',color:'#3b82f6',fontWeight:500}}>{ticket.orderRef}</span></span>
+            <span style={{fontSize:11,color:ticket.sla==='Dépassé'?'#ef4444':'#f59e0b',fontWeight:600}}>⏱ SLA: {ticket.sla}</span>
+          </div>
+          {/* Messages */}
+          <div style={{flex:1,overflowY:'auto',padding:'20px 24px',display:'flex',flexDirection:'column',gap:14,background:'#fafbff'}}>
+            {messages.map((m,i)=>(
+              <div key={i} style={{display:'flex',flexDirection:'column',alignItems:m.role==='client'?'flex-start':'flex-end',animation:'slide-in .2s ease both'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                  {m.role==='client' && <div style={{width:20,height:20,borderRadius:'50%',background:'#e2e8f0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#64748b'}}>{ticket.client[0]}</div>}
+                  {m.ai && <div style={{width:20,height:20,borderRadius:'50%',background:tweaks.agentColor+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:tweaks.agentColor,border:`1px solid ${tweaks.agentColor}40`}}>IA</div>}
+                  {m.role==='human' && !m.ai && <div style={{width:20,height:20,borderRadius:'50%',background:'#dbeafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#3b82f6'}}>M</div>}
+                  <span style={{fontSize:11,color:'#94a3b8'}}>{m.role==='client'?ticket.client:m.ai?tweaks.agentName:'Marie (humain)'} · {m.ts}</span>
+                </div>
+                <div style={{
+                  maxWidth:'80%',padding:'10px 14px',borderRadius:m.role==='client'?'4px 12px 12px 12px':'12px 4px 12px 12px',
+                  fontSize:13,lineHeight:1.6,color:m.role==='client'?'#1e293b':'#fff',
+                  background:m.role==='client'?'#fff':m.ai?tweaks.agentColor:tweaks.accentColor,
+                  boxShadow:'0 1px 3px rgba(0,0,0,.06)',border:m.role==='client'?'1px solid #f1f5f9':'none',
+                }}>{m.text}</div>
+              </div>
+            ))}
+            {agentTyping && (
+              <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                  <div style={{width:20,height:20,borderRadius:'50%',background:tweaks.agentColor+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:tweaks.agentColor,border:`1px solid ${tweaks.agentColor}40`}}>IA</div>
+                  <span style={{fontSize:11,color:'#94a3b8'}}>{tweaks.agentName} rédige…</span>
+                </div>
+                <div style={{padding:'10px 16px',borderRadius:'12px 4px 12px 12px',background:tweaks.agentColor,display:'flex',gap:4,alignItems:'center'}}>
+                  {[0,1,2].map(j=><div key={j} style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,.6)',animation:`pulse-dot 1s ease infinite`,animationDelay:`${j*.2}s`}}/>)}
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef}/>
+          </div>
+          {/* Composer */}
+          <div style={{padding:'16px 24px',background:'#fff',borderTop:'1px solid #f1f5f9'}}>
+            {takeOver && (
+              <div style={{marginBottom:8,padding:'6px 12px',background:'#dbeafe',borderRadius:6,fontSize:11,color:'#1d4ed8',fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+                <Icon name="handoff" size={12} color="#1d4ed8"/> Vous répondez en tant qu'humain — {tweaks.agentName} est en pause sur ce ticket
+              </div>
+            )}
+            <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+              <textarea value={reply} onChange={e=>setReply(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendReply();}}} placeholder={takeOver?"Votre réponse manuelle…":`Simuler un message client…`} style={{flex:1,border:'1px solid #e2e8f0',borderRadius:10,padding:'10px 14px',fontSize:13,fontFamily:'DM Sans',resize:'none',height:60,outline:'none',color:'#334155',background:'#f8fafc'}}/>
+              <button onClick={sendReply} style={{width:40,height:40,borderRadius:10,background:tweaks.accentColor,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                <Icon name="send" size={15} color="#fff"/>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right panel */}
+        <div style={{overflowY:'auto',background:'#fff'}}>
+          {/* Take over */}
+          <div style={{padding:'16px 20px',borderBottom:'1px solid #f8fafc'}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#0f172a',marginBottom:10,textTransform:'uppercase',letterSpacing:.5}}>Contrôle</div>
+            <button onClick={()=>setTakeOver(v=>!v)} style={{
+              width:'100%',padding:'10px',borderRadius:10,border:`1.5px solid ${takeOver?'#10b981':tweaks.agentColor}`,
+              background:takeOver?'#d1fae5':tweaks.agentColor+'10',color:takeOver?'#065f46':tweaks.agentColor,
+              fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'DM Sans',display:'flex',alignItems:'center',justifyContent:'center',gap:8,transition:'all .2s',
+            }}>
+              {takeOver ? <><Icon name="check" size={14} color="#065f46"/> Reprendre contrôle actif</> : <><Icon name="handoff" size={14} color={tweaks.agentColor}/> Reprendre la main</>}
+            </button>
+            {!takeOver && <p style={{fontSize:11,color:'#94a3b8',marginTop:8,lineHeight:1.5}}>L'agent {tweaks.agentName} gère ce ticket automatiquement. Cliquez pour intervenir manuellement.</p>}
+          </div>
+
+          {/* Client info */}
+          <div style={{padding:'16px 20px',borderBottom:'1px solid #f8fafc'}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#0f172a',marginBottom:10,textTransform:'uppercase',letterSpacing:.5}}>Client</div>
+            {[{k:'Nom',v:ticket.client},{k:'Email',v:ticket.email},{k:'Marketplace',v:ticket.marketplace},{k:'Commande',v:ticket.orderRef}].map(r=>(
+              <div key={r.k} style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:11,color:'#94a3b8'}}>{r.k}</span>
+                <span style={{fontSize:11,fontWeight:500,color:'#334155',fontFamily:r.k==='Commande'?'DM Mono':undefined,textAlign:'right',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.v}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Agent reasoning */}
+          <div style={{padding:'16px 20px',borderBottom:'1px solid #f8fafc'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+              <div style={{width:7,height:7,borderRadius:'50%',background:tweaks.agentColor,animation:'pulse-dot 2s ease infinite'}}/>
+              <div style={{fontWeight:700,fontSize:12,color:'#0f172a',textTransform:'uppercase',letterSpacing:.5}}>Raisonnement IA</div>
+            </div>
+            <div style={{background:'#f8f5ff',borderRadius:8,padding:'12px',border:'1px solid #ede9fe'}}>
+              <div style={{fontSize:11,color:'#6d28d9',lineHeight:1.7}}>
+                <div>🎯 <strong>Catégorie détectée :</strong> {ticket.category}</div>
+                <div>📊 <strong>Sentiment :</strong> Frustration modérée</div>
+                <div>⚡ <strong>Action prioritaire :</strong> Contacter transporteur</div>
+                <div>🔄 <strong>Escalade recommandée :</strong> {ticket.priority==='critical'?'Oui':'Non'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline */}
+          <div style={{padding:'16px 20px'}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#0f172a',marginBottom:10,textTransform:'uppercase',letterSpacing:.5}}>Timeline</div>
+            {[{label:'Ticket créé',ts:ticket.created,color:'#94a3b8'},{label:'1ère réponse IA (4 min)',ts:ticket.created.split(' ')[0]+' '+ticket.messages[1]?.ts,color:tweaks.agentColor},{label:'Dernière mise à jour',ts:ticket.updated,color:tweaks.accentColor}].map((e,i)=>(
+              <div key={i} style={{display:'flex',gap:10,marginBottom:12,alignItems:'flex-start'}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:e.color,marginTop:3,flexShrink:0}}/>
+                <div><div style={{fontSize:12,fontWeight:500,color:'#334155'}}>{e.label}</div><div style={{fontSize:10,color:'#94a3b8',marginTop:1,fontFamily:'DM Mono'}}>{e.ts}</div></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── AGENT PAGE ───────────────────────────────────────────────────────────────
+const AgentPage = ({tweaks}) => {
+  const [actions] = useState(AGENT_ACTIONS);
+  const stats = [{label:'Actions aujourd\'hui',val:'47'},{label:'Tickets traités',val:'12'},{label:'Taux auto-résolution',val:'83%'},{label:'Escalades humaines',val:'2'}];
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title={`Agent IA — ${tweaks.agentName}`} subtitle="Activité en temps réel" tweaks={tweaks}/>
+      <div style={{padding:28}}>
+        {/* Agent header */}
+        <div style={{background:'linear-gradient(135deg,#1e1b4b,#4c1d95)',borderRadius:14,padding:'24px',marginBottom:24,display:'flex',gap:20,alignItems:'center'}}>
+          <div style={{width:60,height:60,borderRadius:16,background:'rgba(139,92,246,.3)',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid rgba(139,92,246,.4)',animation:'agent-glow 3s ease infinite',flexShrink:0}}>
+            <Icon name="brain" size={30} color="#c4b5fd"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{color:'#e0d9ff',fontWeight:700,fontSize:18}}>{tweaks.agentName}</div>
+            <div style={{color:'#a78bfa',fontSize:12,marginTop:2}}>Agent SAV autonome · Modèle v2.4 · Actif depuis 6h12</div>
+            <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
+              {['Catégorisation auto','Réponse client','Réclamation transporteur','Génération retours','Escalade intelligente'].map(c=>(
+                <span key={c} style={{fontSize:10,padding:'3px 8px',borderRadius:99,background:'rgba(139,92,246,.2)',color:'#c4b5fd',border:'1px solid rgba(139,92,246,.3)',fontWeight:500}}>{c}</span>
+              ))}
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            {stats.map(s=>(
+              <div key={s.label} style={{background:'rgba(255,255,255,.06)',borderRadius:10,padding:'12px 16px',textAlign:'center'}}>
+                <div style={{color:'#e0d9ff',fontWeight:700,fontSize:20}}>{s.val}</div>
+                <div style={{color:'#a78bfa',fontSize:10,marginTop:2}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Action log */}
+        <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden'}}>
+          <div style={{padding:'16px 20px',borderBottom:'1px solid #f8fafc',display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#10b981',animation:'pulse-dot 2s ease infinite'}}/>
+            <span style={{fontWeight:700,fontSize:14,color:'#0f172a'}}>Journal d'actions</span>
+            <span style={{fontSize:11,color:'#94a3b8',marginLeft:4}}>Mis à jour en temps réel</span>
+          </div>
+          {actions.map((a,i)=>{
+            const typeColor = {action:tweaks.accentColor,decision:tweaks.agentColor,reply:'#10b981',escalation:'#ef4444',resolved:'#10b981'}[a.type]||'#94a3b8';
+            return (
+              <div key={a.id} style={{padding:'14px 20px',borderBottom:'1px solid #f8fafc',display:'flex',gap:14,alignItems:'center',animation:`slide-in .3s ease ${i*.05}s both`}}>
+                <div style={{width:36,height:36,borderRadius:10,background:typeColor+'12',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{a.icon}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:500,color:'#1e293b'}}>{a.action}</div>
+                  <div style={{display:'flex',gap:12,marginTop:3}}>
+                    <span style={{fontSize:11,fontFamily:'DM Mono',color:tweaks.accentColor}}>{a.ticket}</span>
+                    <span style={{fontSize:10,padding:'1px 7px',borderRadius:99,background:typeColor+'15',color:typeColor,fontWeight:600,textTransform:'capitalize'}}>{a.type}</span>
+                  </div>
+                </div>
+                <span style={{fontSize:11,color:'#94a3b8',whiteSpace:'nowrap'}}>{a.ts}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── MARKETPLACE DATA ──────────────────────────────────────────────────────────
+const MERCHANTS = {
+  all: {
+    name: 'Tous les marchands', short: 'Agrégé',
+    kpis: { tickets:32, resolutionIA:84.4, slaDepasse:4, montant:12840, tauxRetour:8.2, insatisfaction:6.1, noteMarchand:4.6, tempsLivraison:3.8, tempsReponse:4, escalades:3, autoResolu:27 },
+    distribution: [{l:'Livraison',v:12,pct:38,c:'#f59e0b'},{l:'Produit',v:8,pct:25,c:'#ef4444'},{l:'Remboursement',v:6,pct:19,c:'#8b5cf6'},{l:'Échange',v:4,pct:13,c:'#10b981'},{l:'Annulation',v:2,pct:6,c:'#3b82f6'}],
+    perf: [{name:'Amazon',tickets:18,ia:88.9,sla:1,montant:5640},{name:'Fnac',tickets:9,ia:77.8,sla:2,montant:4120},{name:'Cdiscount',tickets:5,ia:80,sla:1,montant:3080}],
+    attention: [
+      {client:'Amira B.',ref:'#FNC-77340',marketplace:'Fnac',subject:'Remboursement non reçu depuis 10 jours',status:'escalated',priority:'critical',sla:'Dépassé'},
+      {client:'Sophie M.',ref:'#AMZ-88129',marketplace:'Amazon',subject:'Colis bloqué hub Metz — 8 jours',status:'open',priority:'high',sla:'2h restantes'},
+    ],
+    evolution: [{v:28},{v:34},{v:29},{v:41},{v:36},{v:30},{v:32}],
+  },
+  amazon: {
+    name: 'Amazon', short: 'Amazon',
+    kpis: { tickets:18, resolutionIA:88.9, slaDepasse:1, montant:5640, tauxRetour:6.4, insatisfaction:4.2, noteMarchand:4.8, tempsLivraison:2.9, tempsReponse:3, escalades:1, autoResolu:16 },
+    distribution: [{l:'Livraison',v:8,pct:44,c:'#f59e0b'},{l:'Produit',v:4,pct:22,c:'#ef4444'},{l:'Échange',v:3,pct:17,c:'#10b981'},{l:'Remboursement',v:2,pct:11,c:'#8b5cf6'},{l:'Facturation',v:1,pct:6,c:'#3b82f6'}],
+    perf: [{name:'Amazon FR',tickets:18,ia:88.9,sla:1,montant:5640}],
+    attention: [{client:'Sophie M.',ref:'#AMZ-88129',marketplace:'Amazon',subject:'Colis bloqué hub Metz — 8 jours',status:'open',priority:'high',sla:'2h restantes'}],
+    evolution: [{v:14},{v:18},{v:15},{v:22},{v:19},{v:16},{v:18}],
+  },
+  fnac: {
+    name: 'Fnac', short: 'Fnac',
+    kpis: { tickets:9, resolutionIA:77.8, slaDepasse:2, montant:4120, tauxRetour:11.3, insatisfaction:9.7, noteMarchand:4.3, tempsLivraison:4.5, tempsReponse:6, escalades:2, autoResolu:7 },
+    distribution: [{l:'Remboursement',v:3,pct:33,c:'#8b5cf6'},{l:'Livraison',v:2,pct:22,c:'#f59e0b'},{l:'Produit',v:2,pct:22,c:'#ef4444'},{l:'Échange',v:1,pct:12,c:'#10b981'},{l:'Annulation',v:1,pct:11,c:'#3b82f6'}],
+    perf: [{name:'Fnac FR',tickets:9,ia:77.8,sla:2,montant:4120}],
+    attention: [{client:'Amira B.',ref:'#FNC-77340',marketplace:'Fnac',subject:'Remboursement non reçu depuis 10 jours',status:'escalated',priority:'critical',sla:'Dépassé'}],
+    evolution: [{v:7},{v:10},{v:8},{v:12},{v:9},{v:8},{v:9}],
+  },
+  cdiscount: {
+    name: 'Cdiscount', short: 'Cdiscount',
+    kpis: { tickets:5, resolutionIA:80, slaDepasse:1, montant:3080, tauxRetour:7.8, insatisfaction:5.5, noteMarchand:4.5, tempsLivraison:3.4, tempsReponse:4, escalades:0, autoResolu:4 },
+    distribution: [{l:'Produit',v:2,pct:40,c:'#ef4444'},{l:'Livraison',v:2,pct:40,c:'#f59e0b'},{l:'Facturation',v:1,pct:20,c:'#3b82f6'}],
+    perf: [{name:'Cdiscount FR',tickets:5,ia:80,sla:1,montant:3080}],
+    attention: [],
+    evolution: [{v:5},{v:6},{v:5},{v:7},{v:6},{v:5},{v:5}],
+  },
+  darty: {
+    name: 'Darty', short: 'Darty',
+    kpis: { tickets:0, resolutionIA:0, slaDepasse:0, montant:0, tauxRetour:0, insatisfaction:0, noteMarchand:0, tempsLivraison:0, tempsReponse:0, escalades:0, autoResolu:0 },
+    distribution: [],
+    perf: [],
+    attention: [],
+    evolution: [{v:0},{v:0},{v:0},{v:0},{v:0},{v:0},{v:0}],
+  },
+};
+
+const MpKpiCard = ({label, value, unit='', sub, color, icon, trend, big=false}) => (
+  <div style={{background:'#fff',borderRadius:12,padding:'18px 20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)',border:'1px solid #f1f5f9',flex:1,minWidth:0,animation:'slide-in .3s ease both'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+      <div style={{fontSize:11,color:'#94a3b8',fontWeight:600,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>{label}</div>
+      <div style={{width:34,height:34,borderRadius:9,background:color+'18',display:'flex',alignItems:'center',justifyContent:'center',color,fontSize:15}}>{icon}</div>
+    </div>
+    <div style={{fontSize:big?28:24,fontWeight:800,color:'#0f172a',lineHeight:1,marginBottom:4}}>{value}<span style={{fontSize:13,fontWeight:500,color:'#94a3b8',marginLeft:3}}>{unit}</span></div>
+    {sub && <div style={{fontSize:11,color:'#94a3b8'}}>{sub}</div>}
+    {trend !== undefined && (
+      <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid #f8fafc',fontSize:11,color:trend>=0?'#10b981':'#ef4444',display:'flex',alignItems:'center',gap:4}}>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points={trend>=0?"22 7 13.5 15.5 8.5 10.5 2 17":"2 7 10.5 15.5 15.5 10.5 22 17"}/></svg>
+        {Math.abs(trend)}% vs semaine dernière
+      </div>
+    )}
+  </div>
+);
+
+const StarRating = ({note}) => {
+  const full = Math.floor(note);
+  const partial = note - full;
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:3}}>
+      {[1,2,3,4,5].map(i=>(
+        <svg key={i} width="14" height="14" viewBox="0 0 24 24">
+          <defs><linearGradient id={`star-${i}`}><stop offset={i<=full?'100%':i===full+1?`${Math.round(partial*100)}%`:'0%'} stopColor="#f59e0b"/><stop offset={i<=full?'100%':i===full+1?`${Math.round(partial*100)}%`:'0%'} stopColor="#f59e0b"/><stop offset="100%" stopColor="#e2e8f0"/></linearGradient></defs>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill={`url(#star-${i})`} stroke="none"/>
+        </svg>
+      ))}
+      <span style={{fontSize:13,fontWeight:700,color:'#0f172a',marginLeft:4}}>{note.toFixed(1)}</span>
+    </div>
+  );
+};
+
+const MarketplacePage = ({tweaks}) => {
+  const [selected, setSelected] = useState('all');
+  const [open, setOpen] = useState(false);
+  const d = MERCHANTS[selected];
+  const k = d.kpis;
+
+  const noteColor = k.noteMarchand >= 4.5 ? '#10b981' : k.noteMarchand >= 4 ? '#f59e0b' : '#ef4444';
+  const retourColor = k.tauxRetour <= 7 ? '#10b981' : k.tauxRetour <= 12 ? '#f59e0b' : '#ef4444';
+  const insatColor = k.insatisfaction <= 5 ? '#10b981' : k.insatisfaction <= 10 ? '#f59e0b' : '#ef4444';
+
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      {/* TopBar */}
+      <div style={{background:'#fff',borderBottom:'1px solid #f1f5f9',padding:'0 28px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,position:'sticky',top:0,zIndex:10}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:16,color:'#0f172a'}}>Vue Marketplace</div>
+          <div style={{fontSize:11,color:'#94a3b8'}}>{d.short === 'Agrégé' ? 'Agrégé tous marchands — Lecture seule' : `${d.name} — Données détaillées`}</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:11,fontWeight:600,color:'#8b5cf6',background:'#f5f3ff',padding:'5px 12px',borderRadius:99,border:'1px solid #ede9fe'}}>🏪 Opérateur Marketplace</span>
+          <div style={{position:'relative'}}>
+            <button style={{width:36,height:36,borderRadius:8,border:'1px solid #f1f5f9',background:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>
+              <Icon name="bell" size={16}/>
+            </button>
+            <span style={{position:'absolute',top:4,right:4,width:8,height:8,borderRadius:'50%',background:'#ef4444',border:'2px solid #fff'}}/>
+          </div>
+          <div style={{width:34,height:34,borderRadius:99,background:tweaks.accentColor,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:13}}>F</div>
+        </div>
+      </div>
+
+      <div style={{padding:28}}>
+        {/* Banner + Selector */}
+        <div style={{background:'linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#4c1d95 100%)',borderRadius:14,padding:'18px 24px',marginBottom:24,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <div style={{width:40,height:40,borderRadius:10,background:'rgba(255,255,255,.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>🏪</div>
+            <div>
+              <div style={{color:'#e0d9ff',fontWeight:700,fontSize:14}}>Vue Marketplace — {selected==='all'?'Données agrégées de tous les marchands':`Données ${d.name}`}</div>
+              <div style={{color:'#a78bfa',fontSize:11,marginTop:2}}>Accès lecture seule · Aucune action disponible · Données anonymisées</div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            {/* Merchant dropdown */}
+            <div style={{position:'relative'}}>
+              <button onClick={()=>setOpen(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderRadius:10,border:'1px solid rgba(255,255,255,.2)',background:'rgba(255,255,255,.08)',color:'#e0d9ff',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans',minWidth:180,justifyContent:'space-between'}}>
+                <span>🏷 {d.name}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points={open?"18 15 12 9 6 15":"6 9 12 15 18 9"}/></svg>
+              </button>
+              {open && (
+                <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,background:'#fff',borderRadius:10,boxShadow:'0 8px 30px rgba(0,0,0,.15)',border:'1px solid #f1f5f9',zIndex:50,minWidth:200,overflow:'hidden',animation:'slide-in .15s ease'}}>
+                  {Object.entries(MERCHANTS).map(([k,m])=>(
+                    <button key={k} onClick={()=>{setSelected(k);setOpen(false);}} style={{width:'100%',padding:'10px 16px',border:'none',background:selected===k?'#f5f3ff':'#fff',color:selected===k?tweaks.agentColor:'#334155',fontSize:13,fontWeight:selected===k?600:400,cursor:'pointer',fontFamily:'DM Sans',textAlign:'left',display:'flex',alignItems:'center',gap:8,transition:'background .1s'}}
+                      onMouseEnter={e=>!selected===k&&(e.currentTarget.style.background='#f8fafc')} onMouseLeave={e=>selected!==k&&(e.currentTarget.style.background='#fff')}>
+                      {selected===k && <span style={{color:tweaks.agentColor}}>✓</span>}
+                      {k==='all'?'🌐':k==='amazon'?'📦':k==='fnac'?'📚':k==='cdiscount'?'🛒':'🏪'} {m.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:99,background:'rgba(16,185,129,.15)',border:'1px solid rgba(16,185,129,.25)'}}>
+              <span style={{width:7,height:7,borderRadius:'50%',background:'#10b981',animation:'pulse-dot 2s ease infinite',display:'inline-block'}}/>
+              <span style={{fontSize:11,color:'#6ee7b7',fontWeight:600}}>Live</span>
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Row 1 */}
+        {k.tickets > 0 ? (
+          <>
+            <div style={{display:'flex',gap:14,marginBottom:14,flexWrap:'wrap'}}>
+              <MpKpiCard label="Total Tickets" value={k.tickets} sub={`${k.escalades} escaladé${k.escalades>1?'s':''}`} color="#3b82f6" icon="📥" trend={-8}/>
+              <MpKpiCard label="Résolution IA" value={`${k.resolutionIA}%`} sub={`${k.autoResolu} résolus auto`} color="#10b981" icon="🤖" trend={5}/>
+              <MpKpiCard label="SLA Dépassés" value={k.slaDepasse} sub="Tous marchands" color="#ef4444" icon="⚡" trend={k.slaDepasse>2?12:-15}/>
+              <MpKpiCard label="Montant Traité" value={`${k.montant.toLocaleString('fr')}€`} sub="Volume total" color="#8b5cf6" icon="💶" big/>
+            </div>
+
+            {/* KPI Row 2 — spécifiques SAV */}
+            <div style={{display:'flex',gap:14,marginBottom:24,flexWrap:'wrap'}}>
+              {/* Taux de retour */}
+              <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',border:'1px solid #f1f5f9',flex:1,minWidth:0,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                <div style={{fontSize:11,color:'#94a3b8',fontWeight:600,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Taux de retour</div>
+                <div style={{display:'flex',alignItems:'flex-end',gap:6,marginBottom:6}}>
+                  <span style={{fontSize:26,fontWeight:800,color:retourColor}}>{k.tauxRetour}%</span>
+                </div>
+                <div style={{height:6,background:'#f1f5f9',borderRadius:99,marginBottom:5}}><div style={{width:`${Math.min(k.tauxRetour*4,100)}%`,height:'100%',background:retourColor,borderRadius:99,transition:'width .6s ease'}}/></div>
+                <div style={{fontSize:10,color:'#94a3b8'}}>{k.tauxRetour<=7?'✅ Bon niveau':'⚠️ Au-dessus de la moyenne'}</div>
+              </div>
+              {/* Insatisfaction */}
+              <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',border:'1px solid #f1f5f9',flex:1,minWidth:0,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                <div style={{fontSize:11,color:'#94a3b8',fontWeight:600,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Insatisfaction client</div>
+                <div style={{fontSize:26,fontWeight:800,color:insatColor,marginBottom:6}}>{k.insatisfaction}%</div>
+                <div style={{height:6,background:'#f1f5f9',borderRadius:99,marginBottom:5}}><div style={{width:`${Math.min(k.insatisfaction*5,100)}%`,height:'100%',background:insatColor,borderRadius:99,transition:'width .6s ease'}}/></div>
+                <div style={{fontSize:10,color:'#94a3b8'}}>{k.insatisfaction<=5?'✅ Excellent':'⚠️ À surveiller'}</div>
+              </div>
+              {/* Note vendeur */}
+              <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',border:'1px solid #f1f5f9',flex:1,minWidth:0,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                <div style={{fontSize:11,color:'#94a3b8',fontWeight:600,letterSpacing:.5,textTransform:'uppercase',marginBottom:8}}>Note vendeur</div>
+                <StarRating note={k.noteMarchand}/>
+                <div style={{marginTop:8,fontSize:11,color:noteColor,fontWeight:600}}>{k.noteMarchand>=4.5?'⭐ Excellent':k.noteMarchand>=4?'👍 Bien':'⚠️ À améliorer'}</div>
+              </div>
+              {/* Temps livraison */}
+              <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',border:'1px solid #f1f5f9',flex:1,minWidth:0,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                <div style={{fontSize:11,color:'#94a3b8',fontWeight:600,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Tps moyen livraison</div>
+                <div style={{fontSize:26,fontWeight:800,color:'#0f172a',marginBottom:2}}>{k.tempsLivraison}<span style={{fontSize:12,fontWeight:400,color:'#94a3b8',marginLeft:3}}>jours</span></div>
+                <div style={{fontSize:11,color:k.tempsLivraison<=3?'#10b981':k.tempsLivraison<=5?'#f59e0b':'#ef4444',fontWeight:500}}>{k.tempsLivraison<=3?'🚀 Express':k.tempsLivraison<=5?'📦 Standard':'🐢 Lent'}</div>
+              </div>
+              {/* Temps réponse */}
+              <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',border:'1px solid #f1f5f9',flex:1,minWidth:0,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                <div style={{fontSize:11,color:'#94a3b8',fontWeight:600,letterSpacing:.5,textTransform:'uppercase',marginBottom:6}}>Tps moyen réponse</div>
+                <div style={{fontSize:26,fontWeight:800,color:'#0f172a',marginBottom:2}}>{k.tempsReponse}<span style={{fontSize:12,fontWeight:400,color:'#94a3b8',marginLeft:3}}>min</span></div>
+                <div style={{fontSize:11,color:k.tempsReponse<=5?'#10b981':k.tempsReponse<=15?'#f59e0b':'#ef4444',fontWeight:500}}>SLA: 15 min · {k.tempsReponse<=5?'✅ OK':'⚠️ À surveiller'}</div>
+              </div>
+            </div>
+
+            {/* Charts row */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
+              {/* Distribution */}
+              <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'20px 24px'}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#0f172a',letterSpacing:.5,textTransform:'uppercase',marginBottom:16}}>Distribution par type</div>
+                {d.distribution.map(row=>(
+                  <div key={row.l} style={{marginBottom:11}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                      <span style={{fontSize:12,color:'#475569',fontWeight:500}}>{row.l}</span>
+                      <span style={{fontSize:12,color:'#94a3b8'}}>{row.v} ({row.pct}%)</span>
+                    </div>
+                    <div style={{height:7,background:'#f1f5f9',borderRadius:99}}>
+                      <div style={{width:`${row.pct}%`,height:'100%',background:row.c,borderRadius:99,transition:'width .7s ease'}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Performance par marchand */}
+              <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'20px 24px'}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#0f172a',letterSpacing:.5,textTransform:'uppercase',marginBottom:16}}>Performance par marchand</div>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr style={{borderBottom:'1px solid #f1f5f9'}}>
+                    {['Marchand','Tickets','IA %','SLA ⚠','Montant'].map(h=><th key={h} style={{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:600,color:'#94a3b8',letterSpacing:.5,textTransform:'uppercase'}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {d.perf.map(p=>(
+                      <tr key={p.name} style={{borderBottom:'1px solid #f8fafc'}}>
+                        <td style={{padding:'11px 8px',fontSize:13,fontWeight:700,color:'#0f172a'}}>{p.name}</td>
+                        <td style={{padding:'11px 8px',fontSize:13,color:'#334155',fontWeight:500}}>{p.tickets}</td>
+                        <td style={{padding:'11px 8px',fontSize:13,fontWeight:700,color:p.ia>=85?'#10b981':p.ia>=75?'#f59e0b':'#ef4444'}}>{p.ia}%</td>
+                        <td style={{padding:'11px 8px'}}>
+                          <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:22,height:22,borderRadius:6,background:p.sla<=1?'#d1fae5':p.sla<=2?'#fef3c7':'#fee2e2',color:p.sla<=1?'#065f46':p.sla<=2?'#92400e':'#991b1b',fontSize:11,fontWeight:700}}>{p.sla}</span>
+                        </td>
+                        <td style={{padding:'11px 8px',fontSize:12,color:'#334155',fontFamily:'DM Mono'}}>{p.montant.toLocaleString('fr')}€</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Mini evolution chart */}
+                <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid #f8fafc'}}>
+                  <div style={{fontSize:10,color:'#94a3b8',fontWeight:600,marginBottom:8,textTransform:'uppercase',letterSpacing:.5}}>Évolution tickets 7j</div>
+                  <AreaChart color={tweaks.accentColor} height={55} data={d.evolution}/>
+                </div>
+              </div>
+            </div>
+
+            {/* Attention tickets */}
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',overflow:'hidden'}}>
+              <div style={{padding:'16px 24px',borderBottom:'1px solid #f8fafc',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontWeight:700,fontSize:14,color:'#0f172a'}}>Tickets nécessitant attention</span>
+                  {d.attention.length>0 && <span style={{background:'#ef4444',color:'#fff',borderRadius:99,fontSize:10,fontWeight:700,padding:'1px 7px'}}>{d.attention.length}</span>}
+                </div>
+                <span style={{fontSize:11,color:'#94a3b8',fontStyle:'italic'}}>Lecture seule — aucune action disponible</span>
+              </div>
+              {d.attention.length > 0 ? (
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr style={{background:'#f8fafc'}}>
+                    {['Client (anonymisé)','Marketplace','Sujet','Statut','Priorité','SLA'].map(h=><th key={h} style={{padding:'10px 20px',textAlign:'left',fontSize:11,fontWeight:600,color:'#94a3b8',letterSpacing:.5,textTransform:'uppercase'}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {d.attention.map((t,i)=>(
+                      <tr key={i} style={{borderTop:'1px solid #f8fafc'}}>
+                        <td style={{padding:'14px 20px'}}>
+                          <div style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>{t.client}</div>
+                          <div style={{fontSize:10,fontFamily:'DM Mono',color:'#94a3b8'}}>{t.ref}</div>
+                        </td>
+                        <td style={{padding:'14px 20px',fontSize:13,color:'#475569'}}>{t.marketplace}</td>
+                        <td style={{padding:'14px 20px',fontSize:12,color:'#334155',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.subject}</td>
+                        <td style={{padding:'14px 20px'}}><Badge type={t.status}/></td>
+                        <td style={{padding:'14px 20px'}}><Badge type={t.priority}/></td>
+                        <td style={{padding:'14px 20px',fontSize:11,color:t.sla==='Dépassé'?'#ef4444':'#f59e0b',fontWeight:700}}>{t.sla}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{padding:'36px 24px',textAlign:'center',color:'#94a3b8'}}>
+                  <div style={{fontSize:28,marginBottom:8}}>✅</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'#64748b'}}>Aucun ticket nécessitant attention</div>
+                  <div style={{fontSize:11,marginTop:3}}>Toutes les situations sont sous contrôle</div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:300,gap:12,background:'#fff',borderRadius:12,border:'1px solid #f1f5f9'}}>
+            <div style={{fontSize:40}}>🏪</div>
+            <div style={{fontSize:15,fontWeight:700,color:'#64748b'}}>Aucune donnée pour {d.name}</div>
+            <div style={{fontSize:12,color:'#94a3b8'}}>Ce marchand n'a pas encore de tickets SAV</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── FLUX LIVE PAGE ────────────────────────────────────────────────────────────
+const FLUX_INITIAL = [
+  {id:'ev-001',type:'resolved',ts:'il y a 2 min',ticket:'TK-4818',client:'Théo Garnier',action:'Échange taille L confirmé — livraison express J+1',detail:'Retour généré, nouveau colis expédié. Aucune intervention humaine requise.'},
+  {id:'ev-002',type:'in_progress',ts:'il y a 5 min',ticket:'TK-4821',client:'Sophie Martin',action:'Réclamation transporteur ouverte (réf. TR-229181)',detail:"Colis bloqué hub Metz depuis 8j. Délai réponse transporteur: 2-4h. Agent en attente."},
+  {id:'ev-003',type:'validation',ts:'il y a 9 min',ticket:'TK-4819',client:'Amira Benali',action:'Remboursement exceptionnel 89€ — validation requise',detail:"Blocage bancaire détecté. Agent recommande remboursement immédiat + 10€ geste commercial.",amount:99},
+  {id:'ev-004',type:'resolved',ts:'il y a 18 min',ticket:'TK-4816',client:'Marc Leroy',action:'Facture corrigée TVA 20% — envoyée par email',detail:'Correction automatique appliquée. Client satisfait.'},
+  {id:'ev-005',type:'in_progress',ts:'il y a 25 min',ticket:'TK-4817',client:'Clara Petit',action:"Vérification tracking article manquant SKU-4421",detail:'Dispatch séparé confirmé. ETA: 48h. Message client envoyé.'},
+];
+
+const typeConfig = {
+  in_progress: {label:'En cours',bg:'#fef3c7',color:'#92400e',dot:'#f59e0b',icon:'⚙️'},
+  resolved:    {label:'Résolu',  bg:'#d1fae5',color:'#065f46',dot:'#10b981',icon:'✅'},
+  validation:  {label:'Validation requise',bg:'#ede9fe',color:'#5b21b6',dot:'#8b5cf6',icon:'🔔'},
+};
+
+const AgentEventCard = ({ev, tweaks, onValidate}) => {
+  const cfg = typeConfig[ev.type];
+  return (
+    <div style={{background:'#fff',borderRadius:12,border:'1px solid #f1f5f9',padding:'16px 20px',animation:'slideDown .35s cubic-bezier(.22,1,.36,1) both',marginBottom:10,display:'flex',gap:14,alignItems:'flex-start',boxShadow:'0 1px 4px rgba(0,0,0,.04)'}}>
+      <div style={{width:38,height:38,borderRadius:10,background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,flexShrink:0}}>{cfg.icon}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+          <div>
+            <span style={{fontSize:11,fontFamily:'DM Mono',color:tweaks.accentColor,fontWeight:500}}>{ev.ticket}</span>
+            <span style={{fontSize:11,color:'#94a3b8',marginLeft:8}}>· {ev.client}</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:11,color:'#94a3b8'}}>{ev.ts}</span>
+            <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:99,fontSize:10,fontWeight:600,background:cfg.bg,color:cfg.color}}>
+              <span style={{width:5,height:5,borderRadius:'50%',background:cfg.dot,display:'inline-block'}}/>
+              {cfg.label}
+            </span>
+          </div>
+        </div>
+        <div style={{fontSize:13,fontWeight:600,color:'#0f172a',marginBottom:3}}>{ev.action}</div>
+        <div style={{fontSize:12,color:'#64748b',lineHeight:1.5}}>{ev.detail}</div>
+        {ev.type==='validation' && (
+          <div style={{marginTop:10,display:'flex',gap:8,alignItems:'center'}}>
+            <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>Montant : {ev.amount}€</span>
+            <button onClick={()=>onValidate(ev)} style={{padding:'6px 14px',borderRadius:8,background:tweaks.agentColor,border:'none',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans',marginLeft:8}}>Examiner →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FluxPage = ({setPage, tweaks}) => {
+  const [events, setEvents] = useState(FLUX_INITIAL);
+  const [paused, setPaused] = useState(false);
+  const counter = useRef(10);
+
+  const NEW_EVENTS = [
+    {type:'in_progress',ticket:'TK-4822',client:'Julie Bernard',action:'Analyse demande échange — produit hors délai retour',detail:"Client demande échange à 45j. Politique: 30j. Agent évalue exception possible."},
+    {type:'resolved',ticket:'TK-4823',client:'Paul Moreaux',action:'Doublon commande annulé — remboursement 34€ initié',detail:'Doublon détecté automatiquement. Annulation validée côté marketplace.'},
+    {type:'validation',ticket:'TK-4824',client:'Nadia Rousseau',action:'Geste commercial 25€ bon réduction — validation requise',detail:"Client fidèle 3 ans, 3ème incident consécutif. Agent recommande geste exceptionnel.",amount:25},
+  ];
+
+  useEffect(()=>{
+    if(paused) return;
+    const t = setInterval(()=>{
+      const ev = {...NEW_EVENTS[counter.current % NEW_EVENTS.length], id:`ev-${counter.current}`, ts:'à l\'instant'};
+      counter.current++;
+      setEvents(prev=>[ev,...prev.slice(0,14)]);
+    },5000);
+    return ()=>clearInterval(t);
+  },[paused]);
+
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title="Flux Live" subtitle="Événements agent IA en temps réel" tweaks={tweaks}>
+        <button onClick={()=>setPaused(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:8,border:`1px solid ${paused?'#e2e8f0':tweaks.agentColor+'60'}`,background:paused?'#fff':tweaks.agentColor+'10',color:paused?'#64748b':tweaks.agentColor,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans',transition:'all .2s'}}>
+          {paused ? '▶ Reprendre' : <><span style={{width:7,height:7,borderRadius:'50%',background:tweaks.agentColor,display:'inline-block',animation:'pulse-dot 1.5s ease infinite'}}/> En direct</>}
+        </button>
+      </TopBar>
+      <div style={{padding:28}}>
+        <div style={{display:'flex',gap:12,marginBottom:20}}>
+          {Object.entries(typeConfig).map(([k,v])=>(
+            <div key={k} style={{background:'#fff',borderRadius:10,padding:'12px 18px',border:'1px solid #f1f5f9',display:'flex',gap:10,alignItems:'center'}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:v.dot,display:'inline-block'}}/>
+              <span style={{fontSize:12,fontWeight:600,color:'#334155'}}>{v.label}</span>
+              <span style={{fontSize:16,fontWeight:700,color:'#0f172a'}}>{events.filter(e=>e.type===k).length}</span>
+            </div>
+          ))}
+        </div>
+        <div>
+          {events.map(ev=><AgentEventCard key={ev.id} ev={ev} tweaks={tweaks} onValidate={()=>setPage('validations')}/>)}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── VALIDATIONS PAGE ──────────────────────────────────────────────────────────
+const VALIDATIONS_DATA = [
+  {id:'val-001',ticket:'TK-4819',client:'Amira Benali',marketplace:'Fnac',amount:99,type:'Remboursement exceptionnel',context:"Remboursement bloqué depuis 10 jours — blocage détecté côté banque. Cliente fidèle depuis 2 ans, 1er incident.",agentQuote:"J'ai tenté 3 fois de déclencher le remboursement standard. Un blocage technique côté établissement bancaire empêche le virement. Je recommande un remboursement manuel immédiat + 10€ geste commercial pour compenser l'attente.",priority:'critical',sla:'Dépassé'},
+  {id:'val-002',ticket:'TK-4824',client:'Nadia Rousseau',marketplace:'Amazon',amount:25,type:'Bon de réduction',context:"3ème incident en 6 mois pour cette cliente (colis perdus x2, produit défectueux x1). Rétention à risque.",agentQuote:"Analyse profil client: score fidélité 94/100, panier moyen 87€/mois. Coût de remplacement estimé à 3x le montant du bon. Je recommande fortement ce geste pour éviter le churn.",priority:'medium',sla:'4h restantes'},
+  {id:'val-003',ticket:'TK-4825',client:'Romain Lefebvre',marketplace:'Cdiscount',amount:145,type:'Remboursement hors délai',context:"Demande de remboursement à J+38 (politique: 30j). Client invoque un vice caché. Photos fournies.",agentQuote:"Les photos montrent effectivement un défaut de fabrication non visible à la réception. Juridiquement, la garantie légale de conformité s'applique (2 ans). Remboursement recommandé malgré le délai dépassé.",priority:'high',sla:'2h restantes'},
+  {id:'val-004',ticket:'TK-4826',client:'Estelle Morin',marketplace:'Fnac',amount:12,type:'Frais de port offerts',context:"Retard de livraison de 3 jours imputable au transporteur. Cliente mécontente, 1er achat.",agentQuote:"Geste minime mais symbolique pour convertir cette nouvelle cliente. Offrir les frais de port sur sa prochaine commande (12€) devrait suffire à la fidéliser.",priority:'low',sla:'8h restantes'},
+];
+
+const ValidationCard = ({val, tweaks, onApprove, onReject}) => {
+  const [flipped, setFlipped] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const prioColor = {critical:'#ef4444',high:'#f97316',medium:'#f59e0b',low:'#94a3b8'}[val.priority]||'#94a3b8';
+
+  const handleApprove = () => {
+    setFlipped(true);
+    setTimeout(()=>{ setLeaving(true); setTimeout(()=>onApprove(val.id), 400); }, 700);
+  };
+
+  return (
+    <div style={{perspective:1000,marginBottom:14,opacity:leaving?0:1,transform:leaving?'scale(.95)':'scale(1)',transition:'opacity .4s ease, transform .4s ease'}}>
+      <div style={{position:'relative',transformStyle:'preserve-3d',transform:flipped?'rotateY(180deg)':'rotateY(0deg)',transition:'transform .6s cubic-bezier(.4,0,.2,1)',minHeight:200}}>
+        {/* Front */}
+        <div style={{background:'#fff',borderRadius:14,border:'1px solid #f1f5f9',padding:'18px 22px',boxShadow:'0 2px 8px rgba(0,0,0,.05)',backfaceVisibility:'hidden',WebkitBackfaceVisibility:'hidden',animation:'slideDown .35s cubic-bezier(.22,1,.36,1) both'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+            <div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                <span style={{fontSize:11,fontFamily:'DM Mono',color:tweaks.accentColor,fontWeight:500}}>{val.ticket}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:prioColor+'15',color:prioColor,fontWeight:700}}>{val.priority}</span>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:'#f1f5f9',color:'#475569',fontWeight:500}}>{val.type}</span>
+              </div>
+              <div style={{fontSize:15,fontWeight:700,color:'#0f172a'}}>{val.client} <span style={{fontWeight:400,color:'#94a3b8',fontSize:13}}>· {val.marketplace}</span></div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:24,fontWeight:800,color:'#0f172a'}}>{val.amount}€</div>
+              <div style={{fontSize:10,color:val.sla==='Dépassé'?'#ef4444':'#f59e0b',fontWeight:600}}>⏱ {val.sla}</div>
+            </div>
+          </div>
+          <div style={{fontSize:12,color:'#64748b',marginBottom:10,lineHeight:1.6,background:'#f8fafc',padding:'10px 12px',borderRadius:8}}>{val.context}</div>
+          <div style={{background:'#f5f3ff',border:'1px solid #ede9fe',borderRadius:8,padding:'10px 12px',marginBottom:14}}>
+            <div style={{fontSize:10,color:tweaks.agentColor,fontWeight:700,marginBottom:4,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:tweaks.agentColor,display:'inline-block'}}/>Raisonnement {tweaks.agentName}</div>
+            <div style={{fontSize:12,color:'#5b21b6',lineHeight:1.6,fontStyle:'italic'}}>"{val.agentQuote}"</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={handleApprove} style={{flex:1,padding:'10px',borderRadius:10,background:'#10b981',border:'none',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans',display:'flex',alignItems:'center',justifyContent:'center',gap:6,transition:'opacity .15s'}} onMouseEnter={e=>e.target.style.opacity='.85'} onMouseLeave={e=>e.target.style.opacity='1'}>
+              <Icon name="check" size={14} color="#fff"/> Approuver
+            </button>
+            <button onClick={()=>onReject(val)} style={{flex:1,padding:'10px',borderRadius:10,background:'#fff',border:'1.5px solid #e2e8f0',color:'#ef4444',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans',transition:'border-color .15s, background .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#ef4444';e.currentTarget.style.background='#fef2f2'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#e2e8f0';e.currentTarget.style.background='#fff'}}>
+              Refuser
+            </button>
+            <button style={{padding:'10px 14px',borderRadius:10,background:'#fff',border:'1.5px solid #e2e8f0',color:'#64748b',fontSize:13,cursor:'pointer',fontFamily:'DM Sans'}}>↗</button>
+          </div>
+        </div>
+        {/* Back (approved state) */}
+        <div style={{position:'absolute',top:0,left:0,right:0,background:'linear-gradient(135deg,#d1fae5,#a7f3d0)',borderRadius:14,minHeight:200,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',transform:'rotateY(180deg)',backfaceVisibility:'hidden',WebkitBackfaceVisibility:'hidden',gap:10}}>
+          <div style={{fontSize:40}}>✅</div>
+          <div style={{fontSize:16,fontWeight:700,color:'#065f46'}}>Approuvé — {val.amount}€</div>
+          <div style={{fontSize:12,color:'#047857'}}>Agent notifié · Traitement en cours</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RejectModal = ({val, onClose, onConfirm, tweaks}) => {
+  const [reason, setReason] = useState('');
+  const [preset, setPreset] = useState('');
+  const presets = ['Montant trop élevé — contre-proposition requise','Dossier incomplet — photos manquantes','Hors politique commerciale','À escalader vers le responsable'];
+  useEffect(()=>{ if(preset) setReason(preset); },[preset]);
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(15,22,41,.6)',backdropFilter:'blur(4px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',animation:'fadeIn .15s ease'}}>
+      <div style={{background:'#fff',borderRadius:16,padding:28,width:480,boxShadow:'0 24px 80px rgba(0,0,0,.2)',animation:'slide-in .2s ease'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:16,color:'#0f172a'}}>Refuser la validation</div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,border:'1px solid #e2e8f0',background:'#fff',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b'}}>
+            <Icon name="close" size={14}/>
+          </button>
+        </div>
+        <div style={{fontSize:13,color:'#64748b',marginBottom:16}}>Ticket <span style={{fontFamily:'DM Mono',color:tweaks.accentColor}}>{val.ticket}</span> · {val.client} · <strong>{val.amount}€</strong></div>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:600,color:'#334155',marginBottom:8}}>Raison rapide</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {presets.map(p=>(
+              <button key={p} onClick={()=>setPreset(p)} style={{padding:'8px 12px',borderRadius:8,border:`1.5px solid ${preset===p?'#ef4444':'#e2e8f0'}`,background:preset===p?'#fef2f2':'#fff',color:preset===p?'#ef4444':'#475569',fontSize:12,cursor:'pointer',fontFamily:'DM Sans',textAlign:'left',transition:'all .15s'}}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:12,fontWeight:600,color:'#334155',marginBottom:6}}>Raison détaillée <span style={{color:'#ef4444'}}>*</span></div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Expliquez la décision à l'agent IA pour qu'il apprenne…" style={{width:'100%',height:80,border:`1.5px solid ${reason?'#ef4444':'#e2e8f0'}`,borderRadius:10,padding:'10px 12px',fontSize:12,fontFamily:'DM Sans',resize:'none',outline:'none',color:'#334155',transition:'border-color .15s'}}/>
+          {!reason && <div style={{fontSize:10,color:'#ef4444',marginTop:3}}>Ce champ est obligatoire</div>}
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={onClose} style={{flex:1,padding:'10px',borderRadius:10,border:'1px solid #e2e8f0',background:'#fff',color:'#64748b',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans'}}>Annuler</button>
+          <button onClick={()=>reason&&onConfirm(val.id,reason)} style={{flex:2,padding:'10px',borderRadius:10,background:reason?'#ef4444':'#fca5a5',border:'none',color:'#fff',fontSize:13,fontWeight:700,cursor:reason?'pointer':'not-allowed',fontFamily:'DM Sans',transition:'background .2s'}}>
+            Confirmer le refus
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ValidationsPage = ({tweaks}) => {
+  const [items, setItems] = useState(VALIDATIONS_DATA);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [resolved, setResolved] = useState([]);
+
+  const approve = (id) => { setItems(v=>v.filter(i=>i.id!==id)); setResolved(r=>[...r,{id,action:'approved'}]); };
+  const reject = (val) => setRejectTarget(val);
+  const confirmReject = (id, reason) => { setItems(v=>v.filter(i=>i.id!==id)); setResolved(r=>[...r,{id,action:'rejected',reason}]); setRejectTarget(null); };
+
+  return (
+    <div style={{flex:1,overflowY:'auto'}}>
+      <TopBar title="Validations Humaines" subtitle={`${items.length} décision${items.length!==1?'s':''} en attente`} tweaks={tweaks}/>
+      <div style={{padding:28}}>
+        {items.length>0 ? (
+          <>
+            <div style={{display:'flex',gap:12,marginBottom:20,alignItems:'center'}}>
+              <div style={{padding:'8px 14px',background:'#fef3c7',borderRadius:8,fontSize:12,fontWeight:600,color:'#92400e',display:'flex',alignItems:'center',gap:6}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:'#f59e0b',animation:'pulse-dot 1.5s ease infinite',display:'inline-block'}}/>
+                {items.length} décision{items.length!==1?'s':''} en attente · Montant total : {items.reduce((a,i)=>a+i.amount,0)}€
+              </div>
+              {resolved.length>0 && <div style={{fontSize:11,color:'#94a3b8'}}>{resolved.length} traitée{resolved.length>1?'s':''} ce matin</div>}
+            </div>
+            {items.map(val=><ValidationCard key={val.id} val={val} tweaks={tweaks} onApprove={approve} onReject={reject}/>)}
+          </>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:300,gap:12}}>
+            <div style={{fontSize:48}}>🎉</div>
+            <div style={{fontSize:16,fontWeight:700,color:'#065f46'}}>File vide !</div>
+            <div style={{fontSize:13,color:'#94a3b8'}}>Toutes les validations ont été traitées.</div>
+          </div>
+        )}
+      </div>
+      {rejectTarget && <RejectModal val={rejectTarget} onClose={()=>setRejectTarget(null)} onConfirm={confirmReject} tweaks={tweaks}/>}
+    </div>
+  );
+};
+
+// ── PLACEHOLDER PAGES ─────────────────────────────────────────────────────────
+const PlaceholderPage = ({title, tweaks}) => (
+  <div style={{flex:1,overflowY:'auto'}}>
+    <TopBar title={title} tweaks={tweaks}/>
+    <div style={{padding:28,display:'flex',alignItems:'center',justifyContent:'center',height:'calc(100% - 60px)'}}>
+      <div style={{textAlign:'center',color:'#94a3b8'}}>
+        <div style={{fontSize:48,marginBottom:16}}>🚧</div>
+        <div style={{fontSize:16,fontWeight:600,color:'#64748b'}}>{title}</div>
+        <div style={{fontSize:13,marginTop:4}}>Cette section est en cours de développement</div>
+      </div>
+    </div>
+  </div>
+);
+
+// ── TWEAKS PANEL ─────────────────────────────────────────────────────────────
+const TweaksPanel = ({tweaks, setTweaks, visible}) => {
+  if(!visible) return null;
+  const update = (k,v) => {
+    const next = {...tweaks,[k]:v};
+    setTweaks(next);
+    window.parent.postMessage({type:'__edit_mode_set_keys',edits:next},'*');
+  };
+  return (
+    <div style={{position:'fixed',bottom:20,right:20,width:260,background:'#fff',borderRadius:14,boxShadow:'0 8px 32px rgba(0,0,0,.16)',border:'1px solid #e2e8f0',zIndex:1000,padding:16,animation:'slide-in .2s ease'}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:'#0f172a',borderBottom:'1px solid #f1f5f9',paddingBottom:8}}>⚙️ Tweaks</div>
+      {[{k:'accentColor',l:'Couleur principale',type:'color'},{k:'agentColor',l:'Couleur agent IA',type:'color'},{k:'companyName',l:'Nom boutique',type:'text'},{k:'agentName',l:"Nom de l'agent",type:'text'}].map(f=>(
+        <div key={f.k} style={{marginBottom:10}}>
+          <div style={{fontSize:11,color:'#64748b',fontWeight:500,marginBottom:4}}>{f.l}</div>
+          {f.type==='color'?
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <input type="color" value={tweaks[f.k]} onChange={e=>update(f.k,e.target.value)} style={{width:32,height:28,border:'none',borderRadius:6,cursor:'pointer',padding:2}}/>
+              <span style={{fontSize:11,fontFamily:'DM Mono',color:'#94a3b8'}}>{tweaks[f.k]}</span>
+            </div> :
+            <input type="text" value={tweaks[f.k]} onChange={e=>update(f.k,e.target.value)} style={{width:'100%',padding:'6px 10px',border:'1px solid #e2e8f0',borderRadius:7,fontSize:12,fontFamily:'DM Sans',outline:'none',color:'#334155'}}/>
+          }
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ── AUTH / LOGIN ──────────────────────────────────────────────────────────────
+const USERS = [
+  { id:'vendeur', role:'vendeur',     label:'Vendeur',              email:'boutique@fanny.fr',    password:'vendeur123',  avatar:'F', desc:'Accès dashboard SAV, tickets, flux live, validations et agent IA.' },
+  { id:'mp',      role:'marketplace', label:'Opérateur Marketplace',email:'ops@mirakl.com',       password:'market123',   avatar:'M', desc:'Accès lecture seule aux données agrégées de tous les marchands.' },
+];
+
+const LoginPage = ({onLogin}) => {
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError]       = useState('');
+  const [showPwd, setShowPwd]   = useState(false);
+  const [loading, setLoading]   = useState(false);
+
+  const submit = (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    setTimeout(()=>{
+      const user = USERS.find(u => u.email===email && u.password===password);
+      if(user){ onLogin(user); }
+      else { setError('Email ou mot de passe incorrect.'); setLoading(false); }
+    }, 700);
+  };
+
+  const quickLogin = (u) => { setEmail(u.email); setPassword(u.password); setError(''); };
+
+  return (
+    <div style={{height:'100vh',display:'flex',background:'#0f1629',fontFamily:'DM Sans',overflow:'hidden',position:'relative'}}>
+      {/* Background decoration */}
+      <div style={{position:'absolute',top:-200,right:-200,width:600,height:600,borderRadius:'50%',background:'radial-gradient(circle,rgba(139,92,246,.12) 0%,transparent 70%)',pointerEvents:'none'}}/>
+      <div style={{position:'absolute',bottom:-150,left:-150,width:400,height:400,borderRadius:'50%',background:'radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%)',pointerEvents:'none'}}/>
+
+      {/* Left panel */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',padding:'60px 80px',position:'relative'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:60}}>
+          <div style={{width:40,height:40,borderRadius:10,background:'#3b82f6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:800,color:'#fff'}}>M</div>
+          <div>
+            <div style={{color:'#fff',fontWeight:700,fontSize:16}}>Mirakl SAV</div>
+            <div style={{color:'#475569',fontSize:11}}>Plateforme de gestion SAV</div>
+          </div>
+        </div>
+        <div style={{maxWidth:480}}>
+          <h1 style={{color:'#fff',fontSize:36,fontWeight:800,lineHeight:1.2,marginBottom:12}}>Gérez votre SAV<br/><span style={{background:'linear-gradient(90deg,#818cf8,#a78bfa)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>avec l'IA.</span></h1>
+          <p style={{color:'#64748b',fontSize:14,lineHeight:1.7,marginBottom:40}}>Déléguez vos opérations SAV à un agent IA autonome. Répondez aux clients, gérez les retours et suivez vos performances — tout automatiquement.</p>
+
+          {/* Role cards */}
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {USERS.map(u=>(
+              <div key={u.id} onClick={()=>quickLogin(u)} style={{padding:'14px 18px',borderRadius:12,border:'1px solid rgba(255,255,255,.08)',background:'rgba(255,255,255,.04)',cursor:'pointer',display:'flex',gap:14,alignItems:'center',transition:'all .2s'}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,.07)';e.currentTarget.style.borderColor='rgba(139,92,246,.3)'}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.04)';e.currentTarget.style.borderColor='rgba(255,255,255,.08)'}}>
+                <div style={{width:38,height:38,borderRadius:9,background:u.role==='vendeur'?'#3b82f620':'#8b5cf620',border:`1px solid ${u.role==='vendeur'?'#3b82f640':'#8b5cf640'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:u.role==='vendeur'?'#93c5fd':'#c4b5fd',flexShrink:0}}>{u.avatar}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'#e2e8f0'}}>{u.label}</div>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:1}}>{u.email} · <span style={{fontFamily:'DM Mono',color:'#475569'}}>{u.password}</span></div>
+                </div>
+                <div style={{fontSize:11,color:u.role==='vendeur'?'#60a5fa':'#a78bfa',fontWeight:600}}>→</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right panel — form */}
+      <div style={{width:460,display:'flex',alignItems:'center',justifyContent:'center',padding:40}}>
+        <div style={{background:'#fff',borderRadius:20,padding:'36px 40px',width:'100%',boxShadow:'0 24px 80px rgba(0,0,0,.4)'}}>
+          <div style={{fontWeight:800,fontSize:22,color:'#0f172a',marginBottom:4}}>Connexion</div>
+          <div style={{fontSize:13,color:'#94a3b8',marginBottom:28}}>Accédez à votre espace</div>
+
+          <form onSubmit={submit}>
+            <div style={{marginBottom:16}}>
+              <label style={{display:'block',fontSize:12,fontWeight:600,color:'#334155',marginBottom:6}}>Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="votre@email.com" style={{width:'100%',padding:'11px 14px',border:`1.5px solid ${error?'#ef4444':'#e2e8f0'}`,borderRadius:10,fontSize:13,fontFamily:'DM Sans',outline:'none',color:'#0f172a',transition:'border-color .2s',boxSizing:'border-box'}} onFocus={e=>e.target.style.borderColor='#3b82f6'} onBlur={e=>e.target.style.borderColor=error?'#ef4444':'#e2e8f0'}/>
+            </div>
+            <div style={{marginBottom:20,position:'relative'}}>
+              <label style={{display:'block',fontSize:12,fontWeight:600,color:'#334155',marginBottom:6}}>Mot de passe</label>
+              <input type={showPwd?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={{width:'100%',padding:'11px 40px 11px 14px',border:`1.5px solid ${error?'#ef4444':'#e2e8f0'}`,borderRadius:10,fontSize:13,fontFamily:'DM Sans',outline:'none',color:'#0f172a',transition:'border-color .2s',boxSizing:'border-box'}} onFocus={e=>e.target.style.borderColor='#3b82f6'} onBlur={e=>e.target.style.borderColor=error?'#ef4444':'#e2e8f0'}/>
+              <button type="button" onClick={()=>setShowPwd(v=>!v)} style={{position:'absolute',right:12,top:34,background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:12}}>{showPwd?'🙈':'👁'}</button>
+              {error && <div style={{fontSize:11,color:'#ef4444',marginTop:5,display:'flex',alignItems:'center',gap:4}}>⚠️ {error}</div>}
+            </div>
+
+            <button type="submit" disabled={loading||!email||!password} style={{width:'100%',padding:'12px',borderRadius:10,background:loading||!email||!password?'#e2e8f0':'#3b82f6',border:'none',color:loading||!email||!password?'#94a3b8':'#fff',fontSize:14,fontWeight:700,cursor:loading||!email||!password?'not-allowed':'pointer',fontFamily:'DM Sans',transition:'background .2s',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              {loading ? <><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin 1s linear infinite',display:'inline-block'}}/> Connexion…</> : 'Se connecter →'}
+            </button>
+          </form>
+
+          <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid #f1f5f9',display:'flex',flexDirection:'column',gap:8}}>
+            <div style={{fontSize:11,color:'#94a3b8',textAlign:'center',marginBottom:4}}>Accès rapide (démo)</div>
+            {USERS.map(u=>(
+              <button key={u.id} onClick={()=>quickLogin(u)} style={{padding:'8px 14px',borderRadius:8,border:'1px solid #f1f5f9',background:'#f8fafc',fontSize:11,color:'#475569',cursor:'pointer',fontFamily:'DM Sans',display:'flex',alignItems:'center',justifyContent:'space-between',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e=>e.currentTarget.style.background='#f8fafc'}>
+                <span style={{fontWeight:600}}>{u.label}</span>
+                <span style={{fontFamily:'DM Mono',color:'#94a3b8'}}>{u.email}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── APP ───────────────────────────────────────────────────────────────────────
+const App = () => {
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('mirakl-sav-state')||'{}') } catch{return{}} })();
+  const [user, setUser]           = useState(saved.user||null);
+  const [page, setPage]           = useState(saved.page||'home');
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [tweaks, setTweaks]       = useState({...TWEAK_DEFAULTS,...(saved.tweaks||{})});
+  const [tweaksVisible, setTweaksVisible]   = useState(false);
+
+  // ── Supabase data hook ──
+  const supaData = useSupabaseData();
+
+  useEffect(()=>{ localStorage.setItem('mirakl-sav-state',JSON.stringify({page,tweaks,user})); },[page,tweaks,user]);
+
+  useEffect(()=>{
+    window.addEventListener('message', e=>{
+      if(e.data?.type==='__activate_edit_mode') setTweaksVisible(true);
+      if(e.data?.type==='__deactivate_edit_mode') setTweaksVisible(false);
+    });
+    window.parent.postMessage({type:'__edit_mode_available'},'*');
+  },[]);
+
+  const handleLogin  = (u) => { setUser(u); setPage(u.role==='marketplace'?'marketplace':'home'); };
+  const handleLogout = ()  => { setUser(null); setPage('home'); localStorage.removeItem('mirakl-sav-state'); };
+
+  const navigateToTicket = (t) => { setSelectedTicket(t); setPage('ticket-detail'); };
+
+  if(!user) return <LoginPage onLogin={handleLogin}/>;
+
+  // Badges dynamiques depuis les données live
+  const openTicketCount = TICKETS.filter(t => t.status === 'open' || t.status === 'pending').length;
+  const pendingValidations = supaData.validations.length;
+
+  // Nav selon le rôle
+  const navVendeur = [
+    {id:'home',      label:'Accueil',    icon:'home'},
+    {id:'tickets',   label:'Tickets SAV',icon:'inbox', badge: openTicketCount || undefined},
+    {id:'flux',      label:'Flux Live',  icon:'zap'},
+    {id:'validations',label:'Validations',icon:'check', badge: pendingValidations || undefined},
+    {id:'agent',     label:'Agent IA',   icon:'brain'},
+  ];
+  const navMarketplace = [
+    {id:'marketplace',label:'Marketplace',icon:'eye'},
+  ];
+  const nav = user.role==='marketplace' ? navMarketplace : navVendeur;
+
+  // Sidebar adaptée
+  const SidebarAdapted = () => (
+    <div style={{width:220,flexShrink:0,background:'#0f1629',display:'flex',flexDirection:'column',height:'100vh',position:'sticky',top:0,overflowY:'auto'}}>
+      <div style={{padding:'20px 20px 16px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:32,height:32,borderRadius:8,background:tweaks.accentColor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:800,color:'#fff'}}>M</div>
+          <div>
+            <div style={{color:'#fff',fontWeight:700,fontSize:13}}>Mirakl SAV</div>
+            <div style={{color:'#64748b',fontSize:11,marginTop:1}}>Agent IA actif</div>
+          </div>
+        </div>
+        {user.role==='vendeur' && (
+          <div style={{marginTop:12,padding:'7px 10px',background:'rgba(139,92,246,.12)',border:'1px solid rgba(139,92,246,.2)',borderRadius:8,display:'flex',alignItems:'center',gap:7}}>
+            <div style={{width:7,height:7,borderRadius:'50%',background:tweaks.agentColor,animation:'pulse-dot 2s ease infinite'}}/>
+            <span style={{fontSize:11,color:tweaks.agentColor,fontWeight:600}}>{tweaks.agentName} — En ligne</span>
+          </div>
+        )}
+      </div>
+      <div style={{padding:'12px 20px 8px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+        <div style={{fontSize:10,color:'#475569',fontWeight:600,letterSpacing:.8,textTransform:'uppercase',marginBottom:6}}>{user.role==='marketplace'?'Opérateur':'Boutique'}</div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:22,height:22,borderRadius:5,background:'#1e293b',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#94a3b8',fontWeight:700}}>{user.avatar}</div>
+          <span style={{color:'#e2e8f0',fontSize:12,fontWeight:500}}>{user.role==='marketplace'?'Mirakl Connect':tweaks.companyName}</span>
+        </div>
+        <div style={{marginTop:6,padding:'4px 8px',borderRadius:6,background:user.role==='marketplace'?'rgba(139,92,246,.1)':'rgba(59,130,246,.1)',display:'inline-flex',alignItems:'center',gap:5}}>
+          <span style={{width:5,height:5,borderRadius:'50%',background:user.role==='marketplace'?'#8b5cf6':'#3b82f6',display:'inline-block'}}/>
+          <span style={{fontSize:10,color:user.role==='marketplace'?'#a78bfa':'#93c5fd',fontWeight:600}}>{user.label}</span>
+        </div>
+      </div>
+      <nav style={{padding:'10px 10px',flex:1}}>
+        {nav.map(n=>{
+          const active = page===n.id;
+          return (
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:'none',cursor:'pointer',background:active?'rgba(59,130,246,.15)':'transparent',color:active?tweaks.accentColor:'#94a3b8',fontWeight:active?600:400,fontSize:13,marginBottom:2,transition:'all .15s ease',fontFamily:'DM Sans'}}>
+              <Icon name={n.icon} size={15} color={active?tweaks.accentColor:'#94a3b8'}/>
+              <span style={{flex:1,textAlign:'left'}}>{n.label}</span>
+              {n.badge && <span style={{background:'#ef4444',color:'#fff',borderRadius:99,fontSize:10,fontWeight:700,padding:'1px 6px'}}>{n.badge}</span>}
+            </button>
+          );
+        })}
+      </nav>
+      <div style={{padding:'12px 10px',borderTop:'1px solid rgba(255,255,255,.06)'}}>
+        <button onClick={handleLogout} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:'none',cursor:'pointer',background:'rgba(239,68,68,.08)',color:'#f87171',fontSize:12,fontFamily:'DM Sans',marginBottom:8,fontWeight:500}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Déconnexion
+        </button>
+        {user.role==='vendeur' && (
+          <div style={{padding:'10px 12px',background:'#1e293b',borderRadius:8}}>
+            <div style={{fontSize:10,color:'#475569',fontWeight:600,marginBottom:4}}>TICKETS RÉSOLUS / 7J</div>
+            <div style={{fontSize:18,fontWeight:700,color:'#e2e8f0'}}>94%</div>
+            <div style={{height:4,background:'#334155',borderRadius:99,marginTop:6}}><div style={{width:'94%',height:'100%',background:tweaks.agentColor,borderRadius:99}}/></div>
+            <div style={{fontSize:10,color:'#64748b',marginTop:4}}>Taux par agent IA</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:'#f1f5f9'}}>
+      <SidebarAdapted/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {user.role==='vendeur' && <>
+          {page==='home'         && <HomePage setPage={setPage} setSelectedTicket={navigateToTicket} tweaks={tweaks}/>}
+          {page==='tickets'      && <TicketsPage setPage={setPage} setSelectedTicket={navigateToTicket} tweaks={tweaks}/>}
+          {page==='ticket-detail'&& selectedTicket && <TicketDetail ticket={selectedTicket} setPage={setPage} tweaks={tweaks}/>}
+          {page==='flux'         && <FluxPage setPage={setPage} tweaks={tweaks}/>}
+          {page==='validations'  && <ValidationsPage tweaks={tweaks}/>}
+          {page==='agent'        && <AgentPage tweaks={tweaks}/>}
+          {page==='settings'     && <PlaceholderPage title="Paramètres" tweaks={tweaks}/>}
+        </>}
+        {user.role==='marketplace' && page==='marketplace' && <MarketplacePage tweaks={tweaks}/>}
+      </div>
+      <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} visible={tweaksVisible}/>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

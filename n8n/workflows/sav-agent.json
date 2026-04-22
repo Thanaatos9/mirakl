@@ -1,0 +1,263 @@
+{
+  "name": "SAV Agent — Eugenia",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 2 }]
+        }
+      },
+      "id": "node-trigger",
+      "name": "Every 2 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, client, email, marketplace, subject, category, order_ref, sla, raw_message, priority, created_at\nFROM tickets\nWHERE status = 'open'\nORDER BY\n  CASE priority\n    WHEN 'critical' THEN 1\n    WHEN 'high' THEN 2\n    WHEN 'medium' THEN 3\n    WHEN 'low' THEN 4\n  END,\n  created_at ASC\nLIMIT 10;",
+        "options": {}
+      },
+      "id": "node-fetch-open",
+      "name": "Fetch Open Tickets",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [260, 300],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-tickets",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "isNotEmpty" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-if-has-tickets",
+      "name": "Has Tickets?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ticket = $input.first().json;\n\nconst systemPrompt = `Tu es Aria, l'agent SAV intelligent d'Eugenia pour des vendeurs multi-marketplaces.\n\nTa mission pour chaque ticket :\n1. Classifier l'intention SAV (catégorie + sous-type)\n2. Évaluer la confiance de ta classification (0-100)\n3. Recommander une action concrète\n4. Rédiger une réponse client professionnelle et empathique\n5. Si le cas implique un remboursement ou est ambigu, produire une synthèse pour validation humaine\n\nCatégories autorisées :\n- Livraison (sous-types : suivi, retard, perdu, livré_non_reçu)\n- Produit (sous-types : défectueux, erreur_article, non_conforme)\n- Remboursement (sous-types : intégral, partiel)\n- Échange (sous-types : retour, échange_produit)\n- Facturation (sous-types : double_débit, erreur_montant)\n- Annulation (sous-types : avant_expédition, après_expédition)\n\nActions autorisées :\n- auto_reply : tu peux répondre directement (info, suivi, ETA)\n- request_validation : cas financier → créer une validation humaine avec synthèse\n- escalate : cas trop ambigu ou confiance < 65% → escalader à un humain\n\nRègles absolues :\n- Tu ne déclenches JAMAIS de remboursement sans validation humaine\n- Si la demande mentionne un remboursement → action = request_validation\n- Si confiance < 65% → action = escalate\n- Si le statut transporteur contredit le client → action = escalate\n- Tes réponses client sont en français, professionnelles et empathiques\n- Tes synthèses marchandes sont factuelles et concises\n\nRéponds UNIQUEMENT en JSON strict avec cette structure :\n{\n  \"category\": \"string\",\n  \"sub_type\": \"string\",\n  \"confidence\": number,\n  \"priority\": \"critical|high|medium|low\",\n  \"action\": \"auto_reply|request_validation|escalate\",\n  \"customer_reply\": \"string\",\n  \"merchant_summary\": \"string\",\n  \"reasoning\": \"string\",\n  \"validation\": {\n    \"needed\": boolean,\n    \"amount\": number|null,\n    \"type\": \"string|null\",\n    \"context\": \"string|null\",\n    \"agent_quote\": \"string|null\"\n  }\n}`;\n\nconst userPrompt = `Analyse ce ticket SAV et retourne uniquement un JSON strict.\n\nTicket ID: ${ticket.id}\nClient: ${ticket.client} (${ticket.email})\nMarketplace: ${ticket.marketplace}\nSujet: ${ticket.subject}\nCatégorie actuelle: ${ticket.category || 'non classifié'}\nRéf commande: ${ticket.order_ref || 'N/A'}\nSLA: ${ticket.sla || 'N/A'}\nPriorité actuelle: ${ticket.priority}\nDate création: ${ticket.created_at}\n\nMessage client :\n\"\"\"${ticket.raw_message}\"\"\"  `;\n\nreturn {\n  json: {\n    ...ticket,\n    system_prompt: systemPrompt,\n    user_prompt: userPrompt\n  }\n};"
+      },
+      "id": "node-prepare-ai",
+      "name": "Prepare AI Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 200]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "={{ $json.system_prompt }}"
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.user_prompt }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1500,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "node-ai-call",
+      "name": "AI — Classify & Recommend",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.8,
+      "position": [1000, 200],
+      "credentials": { "openAiApi": { "id": "OPENAI_CREDENTIAL_ID", "name": "OpenAI" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ticket = $input.first().json;\nconst raw = ticket.message?.content || ticket.choices?.[0]?.message?.content || '{}';\n\nlet parsed;\ntry {\n  parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (e) {\n  return {\n    json: {\n      ...ticket,\n      ai_parse_ok: false,\n      ai_error: `JSON parse failed: ${e.message}`,\n      ai_action: 'escalate',\n      ai_confidence: 0\n    }\n  };\n}\n\n// Guardrails\nlet action = parsed.action || 'escalate';\nlet confidence = Number(parsed.confidence || 0);\nconst message = (ticket.raw_message || '').toLowerCase();\nconst refundSignals = ['rembours', 'refund', 'argent', 'money', 'débit', 'avoir'].some(s => message.includes(s));\n\n// Force escalade si confiance trop basse\nif (confidence < 65) {\n  action = 'escalate';\n}\n\n// Force validation si signal financier\nif (refundSignals && action === 'auto_reply') {\n  action = 'request_validation';\n}\n\n// Déterminer le statut final du ticket\nlet finalStatus;\nswitch (action) {\n  case 'auto_reply': finalStatus = 'resolved'; break;\n  case 'request_validation': finalStatus = 'pending'; break;\n  case 'escalate': finalStatus = 'escalated'; break;\n  default: finalStatus = 'escalated';\n}\n\nreturn {\n  json: {\n    ticket_id: ticket.id,\n    client: ticket.client,\n    email: ticket.email,\n    marketplace: ticket.marketplace,\n    order_ref: ticket.order_ref,\n    sla: ticket.sla,\n    raw_message: ticket.raw_message,\n    ai_parse_ok: true,\n    ai_category: parsed.category || ticket.category || 'Produit',\n    ai_sub_type: parsed.sub_type || '',\n    ai_confidence: confidence,\n    ai_priority: parsed.priority || ticket.priority,\n    ai_action: action,\n    ai_customer_reply: parsed.customer_reply || '',\n    ai_merchant_summary: parsed.merchant_summary || '',\n    ai_reasoning: parsed.reasoning || '',\n    ai_validation: parsed.validation || { needed: false },\n    final_status: finalStatus\n  }\n};"
+      },
+      "id": "node-guardrails",
+      "name": "Parse & Apply Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets SET\n  status = '{{ $json.final_status }}',\n  category = '{{ $json.ai_category }}',\n  priority = '{{ $json.ai_priority }}'\nWHERE id = '{{ $json.ticket_id }}';",
+        "options": {}
+      },
+      "id": "node-update-ticket",
+      "name": "Update Ticket Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1520, 200],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO agent_actions (ticket_id, action, type, icon)\nVALUES (\n  '{{ $json.ticket_id }}',\n  'Classifié : {{ $json.ai_category }} — {{ $json.ai_sub_type }} (confiance {{ $json.ai_confidence }}%)',\n  'decision',\n  '🎯'\n);",
+        "options": {}
+      },
+      "id": "node-log-classify",
+      "name": "Log Classification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 200],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-auto-reply",
+              "leftValue": "={{ $json.ai_action }}",
+              "rightValue": "auto_reply",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-switch-action",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2040, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (ticket_id, role, is_ai, text)\nVALUES (\n  '{{ $json.ticket_id }}',\n  'agent',\n  true,\n  '{{ $json.ai_customer_reply.replace(/'/g, \"''\") }}'\n);\n\nINSERT INTO agent_actions (ticket_id, action, type, icon)\nVALUES (\n  '{{ $json.ticket_id }}',\n  'Réponse automatique envoyée au client',\n  'reply',\n  '💬'\n),\n(\n  '{{ $json.ticket_id }}',\n  'Ticket résolu automatiquement',\n  'resolved',\n  '✅'\n);",
+        "options": {}
+      },
+      "id": "node-auto-reply",
+      "name": "Auto Reply & Resolve",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2320, 100],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-validation",
+              "leftValue": "={{ $json.ai_action }}",
+              "rightValue": "request_validation",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-if-validation",
+      "name": "Needs Validation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2320, 340]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO validations (ticket_id, client, marketplace, amount, type, context, agent_quote, priority, sla)\nVALUES (\n  '{{ $json.ticket_id }}',\n  '{{ $json.client }}',\n  '{{ $json.marketplace }}',\n  {{ $json.ai_validation.amount || 0 }},\n  '{{ ($json.ai_validation.type || \"Remboursement\").replace(/'/g, \"''\") }}',\n  '{{ ($json.ai_validation.context || $json.ai_merchant_summary).replace(/'/g, \"''\") }}',\n  '{{ ($json.ai_validation.agent_quote || $json.ai_reasoning).replace(/'/g, \"''\") }}',\n  '{{ $json.ai_priority }}',\n  '{{ $json.sla || \"Respecté\" }}'\n);\n\nINSERT INTO messages (ticket_id, role, is_ai, text)\nVALUES (\n  '{{ $json.ticket_id }}',\n  'agent',\n  true,\n  '{{ $json.ai_customer_reply.replace(/'/g, \"''\") }}'\n);\n\nINSERT INTO agent_actions (ticket_id, action, type, icon)\nVALUES (\n  '{{ $json.ticket_id }}',\n  '{{ ($json.ai_reasoning || \"Validation humaine requise\").replace(/'/g, \"''\") }}',\n  'escalation',\n  '🔒'\n);",
+        "options": {}
+      },
+      "id": "node-create-validation",
+      "name": "Create Validation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2600, 260],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (ticket_id, role, is_ai, text)\nVALUES (\n  '{{ $json.ticket_id }}',\n  'agent',\n  true,\n  '{{ ($json.ai_customer_reply || \"Votre demande a été transférée à notre équipe spécialisée.\").replace(/'/g, \"''\") }}'\n);\n\nINSERT INTO agent_actions (ticket_id, action, type, icon)\nVALUES (\n  '{{ $json.ticket_id }}',\n  '{{ ($json.ai_reasoning || \"Escalade : confiance insuffisante ou cas complexe\").replace(/'/g, \"''\") }}',\n  'escalation',\n  '⚠️'\n);",
+        "options": {}
+      },
+      "id": "node-escalate",
+      "name": "Escalate to Human",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2600, 440],
+      "credentials": { "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {},
+      "id": "node-noop",
+      "name": "No Open Tickets",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [740, 420]
+    }
+  ],
+  "connections": {
+    "Every 2 Minutes": {
+      "main": [[{ "node": "Fetch Open Tickets", "type": "main", "index": 0 }]]
+    },
+    "Fetch Open Tickets": {
+      "main": [[{ "node": "Has Tickets?", "type": "main", "index": 0 }]]
+    },
+    "Has Tickets?": {
+      "main": [
+        [{ "node": "Prepare AI Input", "type": "main", "index": 0 }],
+        [{ "node": "No Open Tickets", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare AI Input": {
+      "main": [[{ "node": "AI — Classify & Recommend", "type": "main", "index": 0 }]]
+    },
+    "AI — Classify & Recommend": {
+      "main": [[{ "node": "Parse & Apply Guardrails", "type": "main", "index": 0 }]]
+    },
+    "Parse & Apply Guardrails": {
+      "main": [[{ "node": "Update Ticket Status", "type": "main", "index": 0 }]]
+    },
+    "Update Ticket Status": {
+      "main": [[{ "node": "Log Classification", "type": "main", "index": 0 }]]
+    },
+    "Log Classification": {
+      "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]]
+    },
+    "Route by Action": {
+      "main": [
+        [{ "node": "Auto Reply & Resolve", "type": "main", "index": 0 }],
+        [{ "node": "Needs Validation?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Needs Validation?": {
+      "main": [
+        [{ "node": "Create Validation", "type": "main", "index": 0 }],
+        [{ "node": "Escalate to Human", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1
+}
