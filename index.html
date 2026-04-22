@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Eugenia — Plateforme SAV IA | Mirakl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+/* ── MIRAKL DESIGN TOKENS ─────────────────────────────────────────────── */
+:root {
+  --primary-dark:    #03182F;
+  --primary-accent:  #2764FF;
+  --primary-bg:      #F2F8FF;
+  --secondary-dark:  #770031;
+  --secondary-accent:#F22E75;
+  --secondary-bg:    #FFE7EC;
+  --white:           #FFFFFF;
+  --body-text:       #30373E;
+  --border:          rgba(3,24,47,.1);
+  --shadow-sm:       0 1px 4px rgba(0,0,0,.10);
+  --shadow-md:       0 2px 8px rgba(0,0,0,.12);
+  --xs: 8px; --sm: 16px; --md: 24px; --lg: 32px; --xl: 48px;
+  --font: 'Roboto Serif', serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: var(--font); background: var(--primary-bg); color: var(--primary-dark); font-size: 14px; line-height: 24px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 99px; }
+
+/* ── HEADER ─────────────────────────────────────────────────────────── */
+.header {
+  background: var(--primary-dark);
+  padding: var(--sm) var(--lg);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.brand { display: flex; align-items: center; gap: var(--sm); }
+.brand-name { font-size: 20px; font-weight: 700; color: var(--white); letter-spacing: -.3px; }
+.brand-name span { color: var(--primary-accent); }
+.brand-chip {
+  background: var(--primary-accent); color: var(--white);
+  font-size: 11px; font-weight: 700; padding: 2px 8px;
+  border-radius: 4px; text-transform: uppercase; letter-spacing: .5px;
+}
+.brand-by { font-size: 12px; color: rgba(255,255,255,.4); font-weight: 400; }
+.header-right { display: flex; align-items: center; gap: var(--sm); font-size: 13px; color: rgba(255,255,255,.55); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; flex-shrink: 0; }
+.dot.warn { background: #F97316; }
+
+/* ── NAV ─────────────────────────────────────────────────────────────── */
+.nav {
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: 0 var(--lg); display: flex;
+}
+.nav-btn {
+  padding: var(--sm) var(--md);
+  background: none; border: none; border-bottom: 3px solid transparent;
+  font-family: var(--font); font-size: 14px; font-weight: 400;
+  color: var(--body-text); cursor: pointer;
+  transition: all .15s ease; margin-bottom: -1px;
+}
+.nav-btn:hover { color: var(--primary-accent); background: var(--primary-bg); }
+.nav-btn.active { color: var(--primary-accent); border-bottom-color: var(--primary-accent); font-weight: 700; }
+.nav-badge {
+  background: var(--secondary-accent); color: var(--white);
+  font-size: 11px; font-weight: 700; padding: 1px 7px;
+  border-radius: 10px; margin-left: 5px;
+}
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────── */
+.main { padding: var(--lg); max-width: 1400px; margin: 0 auto; }
+.tab { display: none; }
+.tab.active { display: block; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--primary-dark); line-height: 32px; margin-bottom: 4px; }
+.page-sub { font-size: 14px; color: var(--body-text); margin-bottom: var(--lg); }
+
+/* ── CARDS ───────────────────────────────────────────────────────────── */
+.card {
+  background: var(--white); border-radius: 8px;
+  padding: var(--md); box-shadow: var(--shadow-sm); margin-bottom: var(--md);
+}
+.card-title {
+  font-size: 16px; font-weight: 700; color: var(--primary-dark);
+  line-height: 26px; padding-bottom: var(--sm);
+  border-bottom: 1px solid var(--border); margin-bottom: var(--sm);
+}
+
+/* ── KPI GRID ────────────────────────────────────────────────────────── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--md); margin-bottom: var(--md); }
+.kpi-card { background: var(--white); border-radius: 8px; padding: var(--md); box-shadow: var(--shadow-sm); }
+.kpi-label { font-size: 13px; color: var(--body-text); margin-bottom: var(--xs); }
+.kpi-value { font-size: 34px; font-weight: 700; color: var(--primary-accent); line-height: 1.1; }
+.kpi-value.green { color: #16A34A; }
+.kpi-value.red   { color: var(--secondary-accent); }
+.kpi-sub { font-size: 12px; color: var(--body-text); margin-top: 6px; }
+
+/* ── GRID ────────────────────────────────────────────────────────────── */
+.two-col   { display: grid; grid-template-columns: 1fr 1fr;     gap: var(--md); margin-bottom: var(--md); }
+.three-col { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--md); margin-bottom: var(--md); }
+@media (max-width: 900px) {
+  .two-col, .three-col { grid-template-columns: 1fr; }
+  .main { padding: var(--sm); }
+  .nav-btn { padding: 10px var(--sm); font-size: 13px; }
+}
+
+/* ── TABLE ───────────────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--body-text);
+  padding: var(--xs) var(--sm); text-align: left;
+  border-bottom: 2px solid var(--border);
+}
+td {
+  padding: var(--sm); border-bottom: 1px solid rgba(3,24,47,.05);
+  font-size: 14px; color: var(--primary-dark); vertical-align: middle;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--primary-bg); }
+
+/* ── BADGES ──────────────────────────────────────────────────────────── */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.b-blue   { background: rgba(39,100,255,.1);  color: var(--primary-accent); }
+.b-green  { background: rgba(22,163,74,.1);   color: #16A34A; }
+.b-red    { background: var(--secondary-bg);  color: var(--secondary-accent); }
+.b-orange { background: rgba(249,115,22,.1);  color: #EA580C; }
+.b-grey   { background: rgba(48,55,62,.08);   color: var(--body-text); }
+
+/* ── BUTTONS ─────────────────────────────────────────────────────────── */
+.btn {
+  padding: 8px 20px; border-radius: 6px; font-family: var(--font);
+  font-size: 14px; font-weight: 700; cursor: pointer; border: none;
+  transition: all .15s ease; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-primary  { background: var(--primary-accent); color: var(--white); }
+.btn-primary:hover { background: #1a52e0; }
+.btn-success  { background: #22C55E; color: var(--white); }
+.btn-success:hover { background: #16A34A; }
+.btn-danger   { background: var(--secondary-accent); color: var(--white); }
+.btn-danger:hover { background: var(--secondary-dark); color: var(--white); }
+.btn-ghost    { background: var(--primary-bg); color: var(--primary-dark); border: 1px solid var(--border); }
+.btn-ghost:hover { background: rgba(39,100,255,.08); }
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+
+/* ── FILTERS ─────────────────────────────────────────────────────────── */
+.filters { display: flex; gap: var(--xs); margin-bottom: var(--md); flex-wrap: wrap; }
+.fil {
+  padding: 5px 16px; border-radius: 20px; font-family: var(--font);
+  font-size: 13px; cursor: pointer; border: 1px solid var(--border);
+  background: var(--white); color: var(--body-text); transition: all .15s ease;
+}
+.fil.active, .fil:hover { background: var(--primary-accent); color: var(--white); border-color: var(--primary-accent); }
+
+/* ── VALIDATION CARD ─────────────────────────────────────────────────── */
+.val-card {
+  background: var(--white); border-radius: 8px;
+  padding: var(--md); box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--primary-accent);
+  margin-bottom: var(--md);
+}
+.val-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--sm); }
+.val-amount { font-size: 26px; font-weight: 700; color: var(--primary-dark); }
+.val-reasoning {
+  background: var(--primary-bg); border-radius: 6px;
+  padding: var(--sm); margin: var(--sm) 0;
+  font-size: 13px; color: var(--body-text);
+  border-left: 3px solid var(--primary-accent);
+}
+.val-actions { display: flex; gap: var(--xs); justify-content: flex-end; }
+
+/* ── SCENARIO GRID ───────────────────────────────────────────────────── */
+.scenario-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--md); }
+.scenario-card {
+  background: var(--white); border-radius: 8px; padding: var(--md);
+  box-shadow: var(--shadow-sm); cursor: pointer;
+  border: 2px solid transparent; transition: all .15s ease;
+}
+.scenario-card:hover { border-color: var(--primary-accent); box-shadow: var(--shadow-md); }
+.scenario-name { font-size: 15px; font-weight: 700; color: var(--primary-dark); margin-bottom: 6px; }
+.scenario-desc { font-size: 13px; color: var(--body-text); }
+
+/* ── CONFIG BANNER ───────────────────────────────────────────────────── */
+.config-banner {
+  background: rgba(249,115,22,.06); border: 1px solid rgba(249,115,22,.25);
+  border-radius: 8px; padding: var(--sm) var(--md); margin-bottom: var(--md);
+  font-size: 13px; color: #92400E;
+}
+.config-banner strong { color: #EA580C; }
+
+/* ── TOAST ───────────────────────────────────────────────────────────── */
+#toasts { position: fixed; bottom: var(--lg); right: var(--lg); z-index: 999; display: flex; flex-direction: column; gap: var(--xs); }
+.toast {
+  background: var(--primary-dark); color: var(--white);
+  padding: var(--sm) var(--md); border-radius: 8px; font-size: 14px;
+  box-shadow: var(--shadow-md); min-width: 240px;
+  animation: slideIn .2s ease;
+}
+.toast.ok  { border-left: 4px solid #22C55E; }
+.toast.err { border-left: 4px solid var(--secondary-accent); }
+.toast.inf { border-left: 4px solid var(--primary-accent); }
+@keyframes slideIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
+
+/* ── MISC ────────────────────────────────────────────────────────────── */
+.conf-bar { width: 80px; height: 6px; background: rgba(3,24,47,.08); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.conf-fill { height: 100%; border-radius: 3px; background: var(--primary-accent); }
+.empty { text-align: center; padding: var(--xl) var(--md); color: var(--body-text); font-size: 14px; }
+.mono { font-family: monospace; font-size: 12px; color: var(--body-text); }
+input.field {
+  width: 100%; padding: 8px 12px; border: 1px solid rgba(3,24,47,.2);
+  border-radius: 6px; font-family: var(--font); font-size: 13px;
+  margin-top: var(--xs); outline: none;
+}
+input.field:focus { border-color: var(--primary-accent); box-shadow: 0 0 0 3px rgba(39,100,255,.12); }
+.label { font-size: 13px; font-weight: 700; color: var(--primary-dark); }
+.help  { font-size: 12px; color: var(--body-text); margin-top: 4px; }
+.chart-wrap { position: relative; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ════════════════ -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-name">Eugenia<span>.</span></div>
+    <div class="brand-chip">SAV IA</div>
+    <div style="color:rgba(255,255,255,.25);margin:0 4px">|</div>
+    <div class="brand-by">Powered by Mirakl</div>
+  </div>
+  <div class="header-right">
+    <div class="dot" id="dot"></div>
+    <span id="sys-status">Mode démonstration</span>
+    <span style="color:rgba(255,255,255,.2)">|</span>
+    <span id="last-refresh">–</span>
+  </div>
+</header>
+
+<!-- ═══════════════ NAV ════════════════════ -->
+<nav class="nav">
+  <button class="nav-btn active" data-tab="overview">Vue d'ensemble</button>
+  <button class="nav-btn" data-tab="tickets">Tickets</button>
+  <button class="nav-btn" data-tab="validations">
+    Validations<span class="nav-badge" id="val-badge" style="display:none"></span>
+  </button>
+  <button class="nav-btn" data-tab="merchants">Marchands</button>
+  <button class="nav-btn" data-tab="demo">Démo</button>
+  <button class="nav-btn" data-tab="settings">Paramètres</button>
+</nav>
+
+<!-- ═══════════════ MAIN ═══════════════════ -->
+<main class="main">
+
+  <!-- ── VUE D'ENSEMBLE ─────────────────────────── -->
+  <section class="tab active" id="tab-overview">
+    <h1 class="page-title">Vue d'ensemble</h1>
+    <p class="page-sub">Tableau de bord temps réel du service client automatisé</p>
+
+    <div class="config-banner" id="cfg-banner" style="display:none">
+      ⚠ <strong>Données de démonstration</strong> — Configurez votre instance N8N dans <strong>Paramètres</strong> pour afficher les données réelles.
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total tickets</div>
+        <div class="kpi-value" id="k-total">–</div>
+        <div class="kpi-sub">Toutes périodes</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Taux résolution IA</div>
+        <div class="kpi-value green" id="k-rate">–</div>
+        <div class="kpi-sub">Sans intervention humaine</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Validations en attente</div>
+        <div class="kpi-value" id="k-pending">–</div>
+        <div class="kpi-sub">Remboursements à approuver</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Infractions SLA</div>
+        <div class="kpi-value red" id="k-sla">–</div>
+        <div class="kpi-sub">Délais dépassés</div>
+      </div>
+    </div>
+
+    <!-- Graphique 1 : Ligne – Tendance des tickets -->
+    <div class="card">
+      <div class="card-title">Évolution des tickets — 7 derniers jours</div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chart-trend"></canvas>
+      </div>
+    </div>
+
+    <!-- Graphiques 2 & 3 : Donut + Barres marchands -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Répartition par type</div>
+        <div class="chart-wrap" style="height:240px">
+          <canvas id="chart-donut"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Résolution IA par marchand</div>
+        <div class="chart-wrap" style="height:240px">
+          <canvas id="chart-merchants-bar"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tickets récents -->
+    <div class="card">
+      <div class="card-title">Tickets récents</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Client</th><th>Type</th><th>Statut</th><th>Confiance IA</th><th>Date</th></tr></thead>
+          <tbody id="recent-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TICKETS ─────────────────────────────────── -->
+  <section class="tab" id="tab-tickets">
+    <h1 class="page-title">Tickets SAV</h1>
+    <p class="page-sub">Gestion de l'ensemble des demandes clients</p>
+    <div class="filters" id="ticket-filters">
+      <button class="fil active" data-f="all">Tous</button>
+      <button class="fil" data-f="in_progress">En cours</button>
+      <button class="fil" data-f="pending_validation">En attente</button>
+      <button class="fil" data-f="resolved">Résolus</button>
+      <button class="fil" data-f="escalated">Escaladés</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Client</th><th>Marchand</th><th>Type</th><th>Statut</th><th>Confiance IA</th><th>Date</th><th></th></tr></thead>
+          <tbody id="tickets-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── VALIDATIONS ─────────────────────────────── -->
+  <section class="tab" id="tab-validations">
+    <h1 class="page-title">File de validation humaine</h1>
+    <p class="page-sub">Remboursements proposés par l'IA nécessitant une approbation</p>
+    <div id="val-list"></div>
+  </section>
+
+  <!-- ── MARCHANDS ───────────────────────────────── -->
+  <section class="tab" id="tab-merchants">
+    <h1 class="page-title">Performance marchands</h1>
+    <p class="page-sub">Indicateurs de qualité par enseigne</p>
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Marchand</th><th>Tickets</th><th>Résolus IA</th><th>Taux résolution</th><th>Infractions SLA</th><th>Montant remboursé</th></tr></thead>
+          <tbody id="merchants-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DEMO ────────────────────────────────────── -->
+  <section class="tab" id="tab-demo">
+    <h1 class="page-title">Panneau de démonstration</h1>
+    <p class="page-sub">Chargez des scénarios types pour illustrer le flux SAV automatisé</p>
+    <div class="card">
+      <div class="card-title">Scénarios disponibles</div>
+      <div class="scenario-grid" id="scenario-grid"></div>
+    </div>
+    <div id="demo-result" class="card" style="display:none;border-left:4px solid #22C55E">
+      <div class="card-title">Résultat</div>
+      <div id="demo-result-body"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Réinitialisation</div>
+      <p style="font-size:14px;color:var(--body-text);margin-bottom:var(--md)">Supprime tous les tickets et validations de démonstration.</p>
+      <button class="btn btn-danger" onclick="resetDemo()">Réinitialiser les données</button>
+    </div>
+  </section>
+
+  <!-- ── PARAMÈTRES ──────────────────────────────── -->
+  <section class="tab" id="tab-settings">
+    <h1 class="page-title">Paramètres</h1>
+    <p class="page-sub">Configuration de l'instance N8N</p>
+    <div class="card">
+      <div class="card-title">Connexion N8N</div>
+      <p style="font-size:14px;color:var(--body-text);margin-bottom:var(--md)">
+        Renseignez l'URL de base de vos webhooks N8N.
+      </p>
+      <div class="label">URL de base</div>
+      <input class="field" type="url" id="n8n-input" placeholder="https://your-n8n.app/webhook/eugenia" />
+      <div class="help">Exemple : https://n8n.mirakl.io/webhook/eugenia</div>
+      <div style="display:flex;gap:var(--xs);margin-top:var(--md)">
+        <button class="btn btn-primary" onclick="saveConfig()">Sauvegarder</button>
+        <button class="btn btn-ghost" onclick="testConn()">Tester la connexion</button>
+      </div>
+      <div id="conn-status" style="margin-top:var(--sm);font-size:13px;display:none"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Endpoints configurés</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Endpoint</th><th>URL complète</th><th>Statut</th></tr></thead>
+          <tbody id="ep-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+<div id="toasts"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════════════
+let BASE = (function() { try { return localStorage.getItem('n8n_base') || ''; } catch(e) { return ''; } })();
+
+var ep = {
+  stats:        function() { return BASE + '/marketplace/stats'; },
+  tickets:      function() { return BASE + '/tickets'; },
+  validations:  function() { return BASE + '/validations'; },
+  merchants:    function() { return BASE + '/marketplace/merchants'; },
+  scenarios:    function() { return BASE + '/demo/scenarios'; },
+  loadScenario: function(id) { return BASE + '/demo/load-scenario/' + id; },
+  reset:        function() { return BASE + '/demo/reset'; },
+  approve:      function(id) { return BASE + '/validations/' + id + '/approve'; },
+  reject:       function(id) { return BASE + '/validations/' + id + '/reject'; }
+};
+
+// ════════════════════════════════════════════════════════════
+// MOCK DATA
+// ════════════════════════════════════════════════════════════
+var MOCK = {
+  stats: {
+    total_tickets: 142,
+    resolved: 118,
+    escalated: 8,
+    sla_breaches: 3,
+    total_amount: 8420.50,
+    ai_resolution_rate: 0.83,
+    pending_validations: 2
+  },
+  trends: {
+    labels:    ['16/04', '17/04', '18/04', '19/04', '20/04', '21/04', '22/04'],
+    resolved:  [12, 15, 18, 14, 22, 19, 18],
+    escalated: [2,  1,  3,  2,  1,  2,  3],
+    pending:   [4,  3,  5,  3,  4,  4,  5]
+  },
+  typeDistrib: {
+    labels: ['Livraison', 'Retour', 'Défaut', 'Annulation', 'Autre'],
+    values: [52, 41, 28, 14, 7]
+  },
+  tickets: [
+    { id:'TCK-001', customer_name:'Marie D.',  merchant:'TechShop',   type:'retour',     status:'resolved',           confidence_score:0.92, created_at:'2026-04-22T09:15:00Z' },
+    { id:'TCK-002', customer_name:'Paul M.',   merchant:'FashionPro', type:'livraison',  status:'pending_validation', confidence_score:0.78, created_at:'2026-04-22T09:42:00Z' },
+    { id:'TCK-003', customer_name:'Julie L.',  merchant:'HomeDecor',  type:'defaut',     status:'in_progress',        confidence_score:0.65, created_at:'2026-04-22T10:01:00Z' },
+    { id:'TCK-004', customer_name:'Ahmed B.',  merchant:'TechShop',   type:'annulation', status:'escalated',          confidence_score:0.45, created_at:'2026-04-22T10:22:00Z' },
+    { id:'TCK-005', customer_name:'Sophie R.', merchant:'FashionPro', type:'retour',     status:'resolved',           confidence_score:0.95, created_at:'2026-04-22T11:05:00Z' }
+  ],
+  validations: [
+    { id:'VAL-001', ticket_id:'TCK-002', customer_name:'Paul M.',  type:'livraison', amount:89.90,  merchant:'FashionPro', agent_reasoning:"Le colis a depassé le délai de livraison de 7 jours. Le client est éligible à un remboursement complet selon les CGV." },
+    { id:'VAL-002', ticket_id:'TCK-006', customer_name:'Clara V.', type:'defaut',    amount:240.00, merchant:'HomeDecor',  agent_reasoning:"Produit défectueux dès réception avec photos à l'appui. Remboursement total recommandé." }
+  ],
+  scenarios: [
+    { id:'livraison', name:'Retard de livraison',   description:'5 tickets clients avec retards de 3 à 14 jours' },
+    { id:'retour',    name:'Retours produits',       description:'4 tickets de retour avec diverses raisons' },
+    { id:'defaut',    name:'Produits défectueux', description:'3 tickets avec preuves photo et litiges qualité' },
+    { id:'mixte',     name:'Scénario complet',  description:'10 tickets variés couvrant tous les cas SAV' }
+  ],
+  merchants: [
+    { merchant_id:'TechShop',   tickets:52, resolved:46, escalated:2, sla_breaches:1, total_amount:3210.00, ai_rate:0.88 },
+    { merchant_id:'FashionPro', tickets:38, resolved:31, escalated:3, sla_breaches:1, total_amount:2840.50, ai_rate:0.82 },
+    { merchant_id:'HomeDecor',  tickets:29, resolved:22, escalated:2, sla_breaches:1, total_amount:1890.00, ai_rate:0.76 },
+    { merchant_id:'SportZone',  tickets:23, resolved:19, escalated:1, sla_breaches:0, total_amount:480.00,  ai_rate:0.83 }
+  ]
+};
+
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+var S = {
+  stats: null, tickets: [], validations: [], merchants: [], scenarios: [],
+  ticketFilter: 'all',
+  charts: { trend: null, donut: null, bar: null }
+};
+
+// ════════════════════════════════════════════════════════════
+// INIT — called directly, no DOMContentLoaded needed
+// (script tag is at end of body, DOM is already ready)
+// ════════════════════════════════════════════════════════════
+function init() {
+  document.getElementById('n8n-input').value = BASE;
+  setupNav();
+  setupFilters();
+
+  if (!BASE) {
+    document.getElementById('cfg-banner').style.display = 'block';
+    loadMock();
+  } else {
+    loadAll();
+  }
+
+  updateHeader();
+  renderEndpoints();
+  setInterval(function() { if (BASE) loadAll(); }, 30000);
+}
+
+function loadMock() {
+  S.stats      = MOCK.stats;
+  S.tickets    = MOCK.tickets;
+  S.validations = MOCK.validations;
+  S.merchants  = MOCK.merchants;
+  S.scenarios  = MOCK.scenarios;
+  renderAll();
+}
+
+function loadAll() {
+  var urls = [ep.stats(), ep.tickets(), ep.validations(), ep.merchants()];
+  var results = [];
+  var done = 0;
+  var failed = false;
+
+  function finish() {
+    if (failed) return;
+    done++;
+    if (done === urls.length) {
+      try {
+        S.stats       = results[0];
+        S.tickets     = toArr(results[1].tickets   || results[1]);
+        S.validations = toArr(results[2].validations || results[2]);
+        S.merchants   = toArr(results[3].merchants  || results[3]);
+        document.getElementById('cfg-banner').style.display = 'none';
+        document.getElementById('last-refresh').textContent =
+          'Actualisé ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+        renderAll();
+      } catch(e) { fallbackMock(); }
+      updateHeader();
+    }
+  }
+
+  function fallbackMock() {
+    if (failed) return;
+    failed = true;
+    document.getElementById('cfg-banner').style.display = 'block';
+    loadMock();
+  }
+
+  urls.forEach(function(url, i) {
+    fetch(url, { headers: {'Content-Type': 'application/json'} })
+      .then(function(r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      })
+      .then(function(data) { results[i] = data; finish(); })
+      .catch(fallbackMock);
+  });
+}
+
+function renderAll() {
+  renderKPIs();
+  renderCharts();
+  renderRecentTickets();
+  renderTickets();
+  renderValidations();
+  renderMerchants();
+  updateValBadge();
+}
+
+// ════════════════════════════════════════════════════════════
+// NAV
+// ════════════════════════════════════════════════════════════
+function setupNav() {
+  var btns = document.querySelectorAll('.nav-btn');
+  btns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tab = btn.getAttribute('data-tab');
+      document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('tab-' + tab).classList.add('active');
+      if (tab === 'demo') renderScenarios();
+      if (tab === 'overview') renderCharts();
+    });
+  });
+}
+
+function setupFilters() {
+  document.getElementById('ticket-filters').addEventListener('click', function(e) {
+    if (!e.target.classList.contains('fil')) return;
+    document.querySelectorAll('#ticket-filters .fil').forEach(function(b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    S.ticketFilter = e.target.getAttribute('data-f');
+    renderTickets();
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER: KPIs
+// ════════════════════════════════════════════════════════════
+function renderKPIs() {
+  var s = S.stats;
+  if (!s) return;
+  document.getElementById('k-total').textContent   = s.total_tickets != null ? s.total_tickets : '–';
+  document.getElementById('k-rate').textContent    = s.ai_resolution_rate != null ? Math.round(s.ai_resolution_rate * 100) + '%' : '–';
+  document.getElementById('k-pending').textContent = s.pending_validations != null ? s.pending_validations : S.validations.length;
+  document.getElementById('k-sla').textContent     = s.sla_breaches != null ? s.sla_breaches : '–';
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER: CHARTS (Chart.js)
+// ════════════════════════════════════════════════════════════
+Chart.defaults.font.family = "'Roboto Serif', serif";
+Chart.defaults.font.size = 12;
+
+function renderCharts() {
+  renderTrendChart();
+  renderDonutChart();
+  renderMerchantsBarChart();
+}
+
+function destroyChart(key) {
+  if (S.charts[key]) {
+    S.charts[key].destroy();
+    S.charts[key] = null;
+  }
+}
+
+function renderTrendChart() {
+  destroyChart('trend');
+  var ctx = document.getElementById('chart-trend');
+  if (!ctx) return;
+  var t = MOCK.trends;
+  S.charts.trend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: t.labels,
+      datasets: [
+        {
+          label: 'Résolus',
+          data: t.resolved,
+          borderColor: '#2764FF',
+          backgroundColor: 'rgba(39,100,255,0.08)',
+          borderWidth: 2.5,
+          pointBackgroundColor: '#2764FF',
+          pointRadius: 4,
+          tension: 0.35,
+          fill: true
+        },
+        {
+          label: 'Escaladés',
+          data: t.escalated,
+          borderColor: '#F22E75',
+          backgroundColor: 'rgba(242,46,117,0.06)',
+          borderWidth: 2,
+          pointBackgroundColor: '#F22E75',
+          pointRadius: 4,
+          tension: 0.35,
+          fill: false
+        },
+        {
+          label: 'En attente',
+          data: t.pending,
+          borderColor: '#F97316',
+          backgroundColor: 'rgba(249,115,22,0.06)',
+          borderWidth: 2,
+          pointBackgroundColor: '#F97316',
+          pointRadius: 4,
+          tension: 0.35,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          align: 'end',
+          labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: '#30373E' }
+        },
+        tooltip: { backgroundColor: '#03182F', padding: 12, cornerRadius: 8 }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(3,24,47,0.05)' },
+          ticks: { color: '#30373E' }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(3,24,47,0.05)' },
+          ticks: { color: '#30373E', stepSize: 5 }
+        }
+      }
+    }
+  });
+}
+
+function renderDonutChart() {
+  destroyChart('donut');
+  var ctx = document.getElementById('chart-donut');
+  if (!ctx) return;
+  var d = MOCK.typeDistrib;
+  S.charts.donut = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: d.labels,
+      datasets: [{
+        data: d.values,
+        backgroundColor: ['#2764FF', '#03182F', '#F22E75', '#F97316', '#8B5CF6'],
+        borderColor: '#FFFFFF',
+        borderWidth: 3,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, color: '#30373E', padding: 12 }
+        },
+        tooltip: { backgroundColor: '#03182F', padding: 12, cornerRadius: 8 }
+      }
+    }
+  });
+}
+
+function renderMerchantsBarChart() {
+  destroyChart('bar');
+  var ctx = document.getElementById('chart-merchants-bar');
+  if (!ctx) return;
+  var data = S.merchants.length ? S.merchants : MOCK.merchants;
+  var sorted = data.slice().sort(function(a, b) { return (b.ai_rate || 0) - (a.ai_rate || 0); });
+  S.charts.bar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(function(m) { return m.merchant_id; }),
+      datasets: [{
+        label: 'Taux résolution IA (%)',
+        data: sorted.map(function(m) { return Math.round((m.ai_rate || 0) * 100); }),
+        backgroundColor: sorted.map(function(m) {
+          var r = m.ai_rate || 0;
+          return r >= 0.85 ? 'rgba(22,163,74,0.85)' : r >= 0.70 ? 'rgba(39,100,255,0.85)' : 'rgba(249,115,22,0.85)';
+        }),
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#03182F', padding: 12, cornerRadius: 8,
+          callbacks: {
+            label: function(ctx) { return ' ' + ctx.parsed.x + '%'; }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true, max: 100,
+          grid: { color: 'rgba(3,24,47,0.05)' },
+          ticks: { color: '#30373E', callback: function(v) { return v + '%'; } }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#30373E', font: { weight: '700' } }
+        }
+      }
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER: TABLES
+// ════════════════════════════════════════════════════════════
+function renderRecentTickets() {
+  var rows = S.tickets.slice(0, 8).map(function(t) {
+    return '<tr>' +
+      '<td><span style="font-weight:700;color:#2764FF">' + t.id + '</span></td>' +
+      '<td>' + (t.customer_name || '–') + '</td>' +
+      '<td>' + labelType(t.type) + '</td>' +
+      '<td>' + statusBadge(t.status) + '</td>' +
+      '<td>' + confBar(t.confidence_score) + '</td>' +
+      '<td class="mono">' + fmtDate(t.created_at) + '</td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('recent-tbody').innerHTML = rows || '<tr><td colspan="6" class="empty">Aucun ticket</td></tr>';
+}
+
+function renderTickets() {
+  var list = S.ticketFilter === 'all'
+    ? S.tickets
+    : S.tickets.filter(function(t) { return t.status === S.ticketFilter; });
+
+  var rows = list.map(function(t) {
+    var btn = t.status === 'pending_validation'
+      ? '<button class="btn btn-sm btn-primary" onclick="gotoVal()">Valider</button>'
+      : '';
+    return '<tr>' +
+      '<td><span style="font-weight:700;color:#2764FF">' + t.id + '</span></td>' +
+      '<td>' + (t.customer_name || '–') + '</td>' +
+      '<td>' + (t.merchant || t.merchant_id || '–') + '</td>' +
+      '<td>' + labelType(t.type) + '</td>' +
+      '<td>' + statusBadge(t.status) + '</td>' +
+      '<td>' + confBar(t.confidence_score) + '</td>' +
+      '<td class="mono">' + fmtDate(t.created_at) + '</td>' +
+      '<td>' + btn + '</td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('tickets-tbody').innerHTML = rows || '<tr><td colspan="8" class="empty">Aucun ticket</td></tr>';
+}
+
+function gotoVal() {
+  document.querySelector('[data-tab="validations"]').click();
+}
+
+function renderValidations() {
+  var el = document.getElementById('val-list');
+  if (!S.validations.length) {
+    el.innerHTML = '<div class="empty" style="padding:48px"><div style="font-size:36px;margin-bottom:16px">✓</div><div style="font-size:16px;font-weight:700">Aucune validation en attente</div><div style="margin-top:8px">L\'IA a tout traité automatiquement.</div></div>';
+    return;
+  }
+  el.innerHTML = S.validations.map(function(v) {
+    return '<div class="val-card">' +
+      '<div class="val-header">' +
+        '<div>' +
+          '<div style="font-size:12px;color:#30373E;margin-bottom:4px">Ticket ' + v.ticket_id + ' — ' + (v.merchant || '–') + ' — ' + labelType(v.type) + '</div>' +
+          '<div style="font-size:15px;font-weight:700">' + v.customer_name + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:11px;color:#30373E;margin-bottom:4px">Montant proposé</div>' +
+          '<div class="val-amount">' + fmtCur(v.amount) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="val-reasoning"><div style="font-size:11px;font-weight:700;color:#2764FF;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Analyse IA</div>' + v.agent_reasoning + '</div>' +
+      '<div class="val-actions">' +
+        '<button class="btn btn-sm btn-ghost" onclick="doReject(\'' + v.id + '\')">Rejeter</button>' +
+        '<button class="btn btn-sm btn-success" onclick="doApprove(\'' + v.id + '\',' + v.amount + ')">Approuver ' + fmtCur(v.amount) + '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function updateValBadge() {
+  var b = document.getElementById('val-badge');
+  var n = S.validations.length;
+  b.textContent = n;
+  b.style.display = n ? 'inline' : 'none';
+}
+
+function renderMerchants() {
+  var sorted = S.merchants.slice().sort(function(a, b) { return (b.ai_rate || 0) - (a.ai_rate || 0); });
+  var rows = sorted.map(function(m, i) {
+    var col = rateColor(m.ai_rate);
+    var sla = m.sla_breaches > 0
+      ? '<span class="badge b-red">' + m.sla_breaches + '</span>'
+      : '<span class="badge b-green">0</span>';
+    return '<tr>' +
+      '<td style="font-weight:700;color:#30373E">' + (i + 1) + '</td>' +
+      '<td style="font-weight:700">' + m.merchant_id + '</td>' +
+      '<td>' + m.tickets + '</td>' +
+      '<td>' + m.resolved + '</td>' +
+      '<td>' + confBar(m.ai_rate, col) + ' <span style="font-size:13px;font-weight:700;color:' + col + '">' + Math.round((m.ai_rate || 0) * 100) + '%</span></td>' +
+      '<td>' + sla + '</td>' +
+      '<td style="font-weight:700">' + fmtCur(m.total_amount) + '</td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('merchants-tbody').innerHTML = rows || '<tr><td colspan="7" class="empty">Aucune donnée</td></tr>';
+}
+
+// ════════════════════════════════════════════════════════════
+// VALIDATIONS ACTIONS
+// ════════════════════════════════════════════════════════════
+function doApprove(id, amount) {
+  if (!confirm('Approuver le remboursement de ' + fmtCur(amount) + ' ?')) return;
+  var go = function() {
+    S.validations = S.validations.filter(function(v) { return v.id !== id; });
+    renderValidations(); updateValBadge();
+    toast('Remboursement approuvé', 'ok');
+  };
+  if (BASE) {
+    fetch(ep.approve(id), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({approved_amount: amount}) })
+      .then(go).catch(function() { toast('Erreur lors de l\'approbation', 'err'); });
+  } else { go(); }
+}
+
+function doReject(id) {
+  var reason = prompt('Raison du rejet :');
+  if (!reason) return;
+  var go = function() {
+    S.validations = S.validations.filter(function(v) { return v.id !== id; });
+    renderValidations(); updateValBadge();
+    toast('Validation rejetée', 'inf');
+  };
+  if (BASE) {
+    fetch(ep.reject(id), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({reason: reason}) })
+      .then(go).catch(function() { toast('Erreur lors du rejet', 'err'); });
+  } else { go(); }
+}
+
+// ════════════════════════════════════════════════════════════
+// DEMO
+// ════════════════════════════════════════════════════════════
+function renderScenarios() {
+  if (!S.scenarios.length) S.scenarios = MOCK.scenarios;
+  document.getElementById('scenario-grid').innerHTML = S.scenarios.map(function(s) {
+    return '<div class="scenario-card" onclick="loadScenario(\'' + s.id + '\',this)">' +
+      '<div class="scenario-name">' + s.name + '</div>' +
+      '<div class="scenario-desc">' + s.description + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function loadScenario(id, el) {
+  el.style.opacity = '0.5'; el.style.pointerEvents = 'none';
+  var done = function(result) {
+    var n = (result.tickets_created || []).length;
+    var ids = (result.tickets_created || []).map(function(t) { return t.id; }).join(', ');
+    var resEl = document.getElementById('demo-result');
+    resEl.style.display = 'block';
+    document.getElementById('demo-result-body').innerHTML =
+      '<div style="color:#16A34A;font-weight:700;margin-bottom:8px">✓ Scénario chargé</div>' +
+      '<div style="font-size:13px;color:#30373E">' + n + ' ticket(s) créé(s) : ' + ids + '</div>';
+    toast('Scénario "' + id + '" chargé', 'ok');
+    el.style.opacity = '1'; el.style.pointerEvents = 'auto';
+    if (BASE) loadAll();
+  };
+  if (BASE) {
+    fetch(ep.loadScenario(id), { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(done)
+      .catch(function() {
+        toast('Erreur lors du chargement', 'err');
+        el.style.opacity = '1'; el.style.pointerEvents = 'auto';
+      });
+  } else {
+    done({ tickets_created: [{id:'DEMO-1'}, {id:'DEMO-2'}] });
+  }
+}
+
+function resetDemo() {
+  if (!confirm('Supprimer toutes les données de démonstration ?')) return;
+  if (BASE) {
+    fetch(ep.reset(), { method: 'POST' })
+      .then(function() { toast('Données réinitialisées', 'inf'); loadAll(); })
+      .catch(function() { toast('Erreur', 'err'); });
+  } else {
+    loadMock();
+    toast('Données réinitialisées', 'inf');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════════════════════════════
+function saveConfig() {
+  var val = document.getElementById('n8n-input').value.trim();
+  if (!val) { toast('URL requise', 'err'); return; }
+  BASE = val;
+  try { localStorage.setItem('n8n_base', val); } catch(e) {}
+  renderEndpoints(); updateHeader();
+  toast('Configuration sauvegardée', 'ok');
+  loadAll();
+}
+
+function testConn() {
+  var el = document.getElementById('conn-status');
+  el.style.display = 'block';
+  el.textContent = 'Test en cours…';
+  el.style.color = '#30373E';
+  fetch(ep.stats(), { headers: {'Content-Type':'application/json'} })
+    .then(function(r) {
+      if (!r.ok) throw new Error();
+      el.textContent = '✓ Connexion réussie';
+      el.style.color = '#16A34A';
+      toast('N8N connecté', 'ok');
+    })
+    .catch(function() {
+      el.textContent = '✗ Connexion échouée — vérifiez l\'URL et que les workflows sont actifs';
+      el.style.color = '#F22E75';
+    });
+}
+
+function renderEndpoints() {
+  var b = BASE || '(non configuré)';
+  var list = [
+    ['Stats marketplace', b + '/marketplace/stats'],
+    ['Liste tickets',     b + '/tickets'],
+    ['Validations',       b + '/validations'],
+    ['Marchands',         b + '/marketplace/merchants'],
+    ['Scénarios démo', b + '/demo/scenarios'],
+    ['Charger scénario',    b + '/demo/load-scenario/:id'],
+    ['Reset démo',          b + '/demo/reset'],
+    ['Approuver validation', b + '/validations/:id/approve'],
+    ['Rejeter validation',   b + '/validations/:id/reject']
+  ];
+  var ok = BASE && BASE.length > 10;
+  document.getElementById('ep-tbody').innerHTML = list.map(function(row) {
+    return '<tr><td>' + row[0] + '</td><td class="mono">' + row[1] + '</td>' +
+      '<td>' + (ok ? '<span class="badge b-blue">Configuré</span>' : '<span class="badge b-orange">À configurer</span>') + '</td></tr>';
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// HEADER
+// ════════════════════════════════════════════════════════════
+function updateHeader() {
+  var ok = BASE && BASE.length > 10;
+  document.getElementById('dot').className = 'dot' + (ok ? '' : ' warn');
+  document.getElementById('sys-status').textContent = ok ? 'Connecté à N8N' : 'Mode démonstration';
+}
+
+// ════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════
+function statusBadge(s) {
+  var m = {
+    resolved:           'b-green', resolved_lbl:           'Résolu',
+    in_progress:        'b-blue',  in_progress_lbl:        'En cours',
+    pending_validation: 'b-orange',pending_validation_lbl: 'En attente',
+    escalated:          'b-red',   escalated_lbl:          'Escaladé'
+  };
+  var cls = m[s] || 'b-grey';
+  var lbl = m[s + '_lbl'] || s;
+  return '<span class="badge ' + cls + '">' + lbl + '</span>';
+}
+
+function labelType(s) {
+  var m = { livraison:'Livraison', retour:'Retour', defaut:'Défaut', annulation:'Annulation', autre:'Autre' };
+  return m[s] || (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '–');
+}
+
+function confBar(v, color) {
+  var pct = Math.round((v || 0) * 100);
+  var col = color || '#2764FF';
+  return '<div style="display:inline-flex;align-items:center;gap:6px">' +
+    '<div class="conf-bar"><div class="conf-fill" style="width:' + pct + '%;background:' + col + '"></div></div>' +
+    '<span style="font-size:12px">' + pct + '%</span></div>';
+}
+
+function rateColor(r) {
+  if (!r) return '#30373E';
+  if (r >= 0.85) return '#16A34A';
+  if (r >= 0.70) return '#2764FF';
+  return '#EA580C';
+}
+
+function fmtDate(iso) {
+  if (!iso) return '–';
+  try {
+    return new Date(iso).toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'});
+  } catch(e) { return iso; }
+}
+
+function fmtCur(n) {
+  if (n == null) return '–';
+  try {
+    return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR'}).format(n);
+  } catch(e) { return n + ' €'; }
+}
+
+function toArr(v) { return Array.isArray(v) ? v : []; }
+
+function toast(msg, type) {
+  var c = document.getElementById('toasts');
+  var el = document.createElement('div');
+  el.className = 'toast ' + (type || 'inf');
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(function() { el.parentNode && el.parentNode.removeChild(el); }, 4000);
+}
+
+// ════════════════════════════════════════════════════════════
+// START
+// ════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
