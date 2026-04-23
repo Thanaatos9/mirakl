@@ -1933,26 +1933,129 @@ const SavPage = ({setPage, setSelectedTicket, tweaks, filters}) => {
   );
 };
 
-// ── IA PAGE (Flux + Validations + Agent chat fusionnés) ───────────────────────
+// ── IA PAGE ────────────────────────────────────────────────────────────────────
 const IaPage = ({setPage, tweaks, filters, validations: vProp}) => {
-  const [tab, setTab] = useState('flux');
-  const effectiveVal = vProp !== undefined ? vProp : VALIDATIONS_DATA;
-  const pendingVal = effectiveVal.length;
+  const rootCauses = [
+    {id:'livraison',icon:'🚚',category:'Livraison',share:34,cause:'Délai annoncé systématiquement sous-estimé de 1.2 jour en moyenne',impact:'-34% si délai corrigé',color:'#f59e0b'},
+    {id:'remboursement',icon:'💸',category:'Remboursement',share:22,cause:'Politique de retour absente sur 8 de tes fiches produit',impact:'-15% si politique ajoutée',color:'#8b5cf6'},
+    {id:'doublon',icon:'🧾',category:'Doublon commande',share:18,cause:'Tunnel checkout : double-clic détecté sur bouton validation',impact:'-18% si corrigé',color:'#ef4444'},
+    {id:'produit',icon:'📦',category:'Produit non conforme',share:14,cause:'Photos produit ne montrent pas les dimensions réelles',impact:'-14% si photos mises à jour',color:'#10b981'},
+  ];
+  const recommendations = [
+    {id:'r1',priority:'URGENT',action:'Mets à jour tes délais de livraison sur toutes tes marketplaces',gain:'-8 tickets/mois'},
+    {id:'r2',priority:'IMPORTANT',action:'Ajoute une politique de retour explicite sur tes 8 fiches sans politique',gain:'-5 tickets/mois'},
+    {id:'r3',priority:'CONSEIL',action:'Remplace les 3 photos produit signalées par l’IA comme insuffisantes',gain:'-4 tickets/mois'},
+  ];
+  const [controls, setControls] = useState([
+    {id:'c1',name:'Livraison retardée',enabled:true,autonomy:75,success:91,outcome:'Géré seule 28 tickets → 26 correctement'},
+    {id:'c2',name:'Remboursement < 50€',enabled:true,autonomy:60,success:88,outcome:'Géré seule 14 tickets → 12 correctement'},
+    {id:'c3',name:'Remboursement > 50€',enabled:false,autonomy:0,success:null,outcome:'Toujours escaladé vers humain'},
+    {id:'c4',name:'Litige produit',enabled:true,autonomy:40,success:67,outcome:'Géré seule 9 tickets → 6 correctement'},
+  ]);
+  const priorityStyle = {
+    URGENT:{bg:'#fee2e2',color:'#b91c1c'},
+    IMPORTANT:{bg:'#ffedd5',color:'#9a3412'},
+    CONSEIL:{bg:'#e2e8f0',color:'#475569'},
+  };
+  const successColor = (score) => {
+    if (score === null) return '#94a3b8';
+    if (score >= 85) return '#10b981';
+    if (score >= 65) return '#f59e0b';
+    return '#ef4444';
+  };
+  const toggleControl = (id) => setControls(prev => prev.map(item => item.id===id ? {...item,enabled:!item.enabled} : item));
+
   return (
     <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <TopBar title="Intelligence IA" subtitle={`${tweaks.agentName} actif · ${pendingVal} validation${pendingVal>1?'s':''} en attente`} tweaks={tweaks} filters={filters}/>
-      {/* Tab bar */}
-      <div style={{background:'#fff',borderBottom:'1px solid #F2F8FF',padding:'0 24px',display:'flex',gap:4}}>
-        {[{id:'flux',label:'Flux Live'},{id:'validations',label:`Validations (${pendingVal})`},{id:'agent',label:'Dialogue'}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:'12px 20px',border:'none',background:'none',cursor:'pointer',fontSize:13,fontWeight:tab===t.id?700:400,color:tab===t.id?'#03182F':'rgba(3,24,47,0.4)',borderBottom:tab===t.id?'2px solid #2764FF':'2px solid transparent',fontFamily:"'Roboto Serif',serif",transition:'all .15s'}}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div style={{flex:1,overflowY:'auto'}}>
-        {tab==='flux' && <FluxInner tweaks={tweaks} setPage={setPage}/>}
-        {tab==='validations' && <ValidationsInner tweaks={tweaks} validations={effectiveVal}/>}
-        {tab==='agent' && <AgentInner tweaks={tweaks}/>}
+      <TopBar title="Intelligence IA" subtitle="Pourquoi tu reçois ces tickets et où l'IA mérite plus d'autonomie" tweaks={tweaks} filters={filters}/>
+      <div style={{flex:1,overflowY:'auto',padding:24}}>
+        {/* BLOC 1 */}
+        <div style={{marginBottom:28}}>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:22,fontWeight:800,color:'#03182F'}}>Pourquoi tu reçois ces tickets</div>
+            <div style={{fontSize:12,color:'rgba(3,24,47,0.45)',marginTop:4}}>Patterns détectés par l'IA sur les 30 derniers jours</div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:14}}>
+            {rootCauses.map(c=>(
+              <div key={c.id} style={{background:'#fff',border:'1px solid #F2F8FF',borderRadius:12,padding:'16px',boxShadow:'0 1px 4px rgba(0,0,0,0.08)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                  <div style={{width:34,height:34,borderRadius:10,background:c.color+'1f',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>{c.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#03182F'}}>{c.category}</div>
+                    <div style={{fontSize:11,color:c.color,fontWeight:700,marginTop:2}}>{c.share}% de tes tickets</div>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:'#30373E',lineHeight:1.55,minHeight:56}}>{c.cause}</div>
+                <div style={{marginTop:10,fontSize:11,fontWeight:700,color:c.color}}>{c.impact}</div>
+                <div style={{marginTop:10,height:6,background:'#e2e8f0',borderRadius:99,overflow:'hidden'}}>
+                  <div style={{width:`${c.share}%`,height:'100%',background:c.color,borderRadius:99}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* BLOC 2 */}
+        <div style={{marginBottom:28,background:'#fff',border:'1px solid #F2F8FF',borderRadius:12,boxShadow:'0 1px 4px rgba(0,0,0,0.08)',overflow:'hidden'}}>
+          <div style={{padding:'16px 20px',borderBottom:'1px solid #F2F8FF'}}>
+            <div style={{fontSize:22,fontWeight:800,color:'#03182F'}}>Tes leviers prioritaires</div>
+            <div style={{fontSize:12,color:'rgba(3,24,47,0.45)',marginTop:4}}>Classées par gain potentiel estimé</div>
+          </div>
+          <div style={{padding:'8px 20px 14px'}}>
+            {recommendations.map((rec)=>(
+              <div key={rec.id} style={{padding:'14px 0',borderBottom:'1px solid #F2F8FF',display:'flex',alignItems:'center',gap:14}}>
+                <span style={{fontSize:10,fontWeight:700,padding:'4px 8px',borderRadius:99,background:priorityStyle[rec.priority].bg,color:priorityStyle[rec.priority].color,minWidth:76,textAlign:'center'}}>
+                  {rec.priority}
+                </span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'#03182F',lineHeight:1.45}}>{rec.action}</div>
+                  <div style={{fontSize:11,color:tweaks.accentColor,fontWeight:700,marginTop:3}}>{rec.gain}</div>
+                </div>
+                <button disabled style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${tweaks.accentColor}66`,background:'#fff',color:tweaks.accentColor,fontSize:12,fontWeight:600,fontFamily:"'Roboto Serif',serif",opacity:.7,cursor:'not-allowed'}}>
+                  Voir comment faire
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* BLOC 3 */}
+        <div style={{background:'#fff',border:'1px solid #F2F8FF',borderRadius:12,boxShadow:'0 1px 4px rgba(0,0,0,0.08)',padding:'16px 20px'}}>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:22,fontWeight:800,color:'#03182F'}}>Fais confiance à l'IA là où elle le mérite</div>
+            <div style={{fontSize:12,color:'rgba(3,24,47,0.45)',marginTop:4}}>Basé sur ses performances réelles ce mois</div>
+          </div>
+
+          {controls.map(item=>(
+            <div key={item.id} style={{padding:'12px 0',borderBottom:'1px solid #F2F8FF'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#03182F'}}>{item.name}</div>
+                <button onClick={()=>toggleControl(item.id)} style={{width:40,height:22,borderRadius:99,border:'none',cursor:'pointer',background:item.enabled?tweaks.agentColor:'#cbd5e1',position:'relative',transition:'background .2s'}}>
+                  <span style={{position:'absolute',top:2,left:item.enabled?20:2,width:18,height:18,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                </button>
+              </div>
+              <div style={{marginTop:8}}>
+                <div style={{fontSize:11,color:'rgba(3,24,47,0.5)',marginBottom:5}}>Autonomie actuelle : {item.autonomy}%</div>
+                <div style={{height:6,background:'#e2e8f0',borderRadius:99,overflow:'hidden'}}>
+                  <div style={{width:`${item.autonomy}%`,height:'100%',background:item.enabled?tweaks.accentColor:'#94a3b8',borderRadius:99}}/>
+                </div>
+              </div>
+              <div style={{marginTop:8,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+                <span style={{fontSize:12,fontWeight:700,color:successColor(item.success)}}>
+                  Taux de succès : {item.success===null?'n/a':`${item.success}%`}
+                </span>
+              </div>
+              <div style={{fontSize:12,color:'#30373E',marginTop:4}}>{item.outcome}</div>
+            </div>
+          ))}
+
+          <div style={{marginTop:14,padding:'12px 14px',borderRadius:10,background:'rgba(139,92,246,.12)',border:'1px solid rgba(139,92,246,.25)',display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:22,height:22,borderRadius:8,background:'rgba(139,92,246,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:tweaks.agentColor}}>✨</div>
+            <div style={{fontSize:12,fontWeight:600,color:'#6d28d9'}}>
+              Après tes 12 corrections validées ce mois sur Remboursement, l'IA a réduit ses erreurs de 34% sur cette catégorie.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
