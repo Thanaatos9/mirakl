@@ -1562,8 +1562,9 @@ const LoginPage = ({onLogin}) => {
 // ── APP ───────────────────────────────────────────────────────────────────────
 const App = () => {
   const saved = (() => { try { return JSON.parse(localStorage.getItem('mirakl-sav-state')||'{}') } catch{return{}} })();
-  const defaultUser = USERS.find(u => u.role==='vendeur') || USERS[0];
-  const [user, setUser]           = useState(saved.user||defaultUser);
+  const isAuthenticated = (() => { try { return localStorage.getItem('mirakl_sav_authenticated') === 'true'; } catch { return false; } })();
+  const initialUser = isAuthenticated ? (saved.user || null) : null;
+  const [user, setUser]           = useState(initialUser);
   const [page, setPage]           = useState(saved.page||'home');
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [tweaks, setTweaks]       = useState({...TWEAK_DEFAULTS,...(saved.tweaks||{})});
@@ -1572,15 +1573,49 @@ const App = () => {
   // ── Supabase data hook ──
   const supaData = useSupabaseData();
 
-  useEffect(()=>{ localStorage.setItem('mirakl-sav-state',JSON.stringify({page,tweaks,user})); },[page,tweaks,user]);
+  const handleLogin = (nextUser) => {
+    const nextPage = nextUser.role === 'marketplace' ? 'marketplace' : 'home';
+    setUser(nextUser);
+    setPage(nextPage);
+    try {
+      localStorage.setItem('mirakl_sav_role', nextUser.role);
+      localStorage.setItem('mirakl_sav_email', nextUser.email);
+      localStorage.setItem('mirakl_sav_authenticated', 'true');
+      localStorage.setItem('mirakl-sav-state', JSON.stringify({page:nextPage,tweaks,user:nextUser}));
+    } catch (_) {}
+  };
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('mirakl-sav-state');
+      localStorage.removeItem('mirakl_sav_role');
+      localStorage.removeItem('mirakl_sav_email');
+      localStorage.removeItem('mirakl_sav_authenticated');
+    } catch (_) {}
+    setUser(null);
+    setPage('home');
+    window.location.href = 'login.html';
+  };
 
   useEffect(()=>{
-    window.addEventListener('message', e=>{
+    if(user) localStorage.setItem('mirakl-sav-state',JSON.stringify({page,tweaks,user}));
+  },[page,tweaks,user]);
+
+  useEffect(()=>{
+    const onMessage = e=>{
       if(e.data?.type==='__activate_edit_mode') setTweaksVisible(true);
       if(e.data?.type==='__deactivate_edit_mode') setTweaksVisible(false);
-    });
+      if(e.data?.type==='logout') handleLogout();
+    };
+    window.addEventListener('message', onMessage);
     window.parent.postMessage({type:'__edit_mode_available'},'*');
+    return () => window.removeEventListener('message', onMessage);
   },[]);
+
+  if (!user) {
+    window.location.href = 'login.html';
+    return null;
+  }
 
   const navigateToTicket = (t) => { setSelectedTicket(t); setPage('ticket-detail'); };
 
@@ -1645,6 +1680,10 @@ const App = () => {
             <div style={{fontSize:10,color:'#64748b',marginTop:4}}>Taux par agent IA</div>
           </div>
         )}
+        <button onClick={handleLogout} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,border:'none',cursor:'pointer',background:'rgba(239,68,68,.1)',color:'#f87171',fontSize:12,fontFamily:'DM Sans',fontWeight:600,marginTop:user.role==='vendeur'?10:0}}>
+          <Icon name="logout" size={15} color="#f87171"/>
+          Déconnexion
+        </button>
       </div>
     </div>
   );
@@ -1655,7 +1694,7 @@ const App = () => {
       <iframe
         src="vendor-dashboard.html"
         title="Dashboard Vendeur"
-        style={{width:'100vw',height:'100vh',border:'none',background:'#F2F8FF',display:'block'}}
+        style={{width:'100vw',height:'100vh',border:'none',background:'#f1f5f9',display:'block'}}
       />
     );
   }
